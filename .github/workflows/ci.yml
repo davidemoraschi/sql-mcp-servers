@@ -37,7 +37,7 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Build with Batch Script
-        run: .uild.bat
+        run: .\build.bat
 
       - name: Build with CMake (Release)
         run: |
