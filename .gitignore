@@ -1,0 +1,38 @@
+# Build & binary outputs
+build/
+bin/
+out/
+*.exe
+*.dll
+*.so
+*.dylib
+*.o
+*.obj
+*.pdb
+*.ilk
+*.idb
+*.exp
+*.lib
+sqlite-mcp-server
+
+# CMake generated
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+Makefile.cmake
+compile_commands.json
+.cmake/
+
+# Visual Studio & IDEs
+.vs/
+*.vcxproj.user
+*.suo
+*.user
+.vscode/
+.idea/
+
+# Local test databases
+*.db
+*.sqlite
+*.sqlite3

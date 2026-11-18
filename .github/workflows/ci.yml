@@ -1,0 +1,54 @@
+name: CI Build
+
+on:
+  push:
+    branches: [ '**' ]
+  pull_request:
+    branches: [ '**' ]
+
+jobs:
+  build-linux:
+    name: Build Linux (64-bit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Build with Shell Script
+        run: |
+          chmod +x build.sh
+          ./build.sh
+
+      - name: Build with CMake (Release)
+        run: |
+          mkdir build-cmake
+          cd build-cmake
+          cmake -DCMAKE_BUILD_TYPE=Release ..
+          cmake --build .
+
+  build-windows:
+    name: Build Windows (64-bit MSVC)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSVC Developer Command Prompt
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Build with Batch Script
+        run: .uild.bat
+
+      - name: Build with CMake (Release)
+        run: |
+          mkdir build-cmake
+          cd build-cmake
+          cmake -DCMAKE_BUILD_TYPE=Release ..
+          cmake --build . --config Release
+
+      - name: Build with CMake (Debug)
+        run: |
+          mkdir build-cmake-debug
+          cd build-cmake-debug
+          cmake -DCMAKE_BUILD_TYPE=Debug ..
+          cmake --build . --config Debug
