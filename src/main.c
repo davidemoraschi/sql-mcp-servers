@@ -92,7 +92,16 @@ int main(int argc, char **argv) {
             continue;
         }
 
-        if (strcmp(req.method, "server/discover") == 0) {
+        if (strcmp(req.method, "initialize") == 0) {
+            tools_handle_initialize(req.id);
+        }
+        else if (strcmp(req.method, "notifications/initialized") == 0 || strcmp(req.method, "initialized") == 0) {
+            fprintf(stderr, "[MCP] Client sent initialized notification.\n");
+        }
+        else if (strcmp(req.method, "ping") == 0) {
+            json_rpc_send_result(req.id, "{}");
+        }
+        else if (strcmp(req.method, "server/discover") == 0) {
             tools_handle_discover(req.id);
         } else if (strcmp(req.method, "tools/list") == 0) {
             tools_handle_list(req.id);

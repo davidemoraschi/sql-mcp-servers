@@ -10,6 +10,14 @@
 #include "rdbms_tools.h"
 #include "db_sqlite.h"
 
+void tools_handle_initialize(const char* id) {
+    const char* init_json =
+        "{\"protocolVersion\":\"2024-11-05\","
+        "\"serverInfo\":{\"name\":\"sqlite-mcp-server\",\"version\":\"1.0.0\"},"
+        "\"capabilities\":{\"tools\":{\"listChanged\":false}}}";
+    json_rpc_send_result(id, init_json);
+}
+
 void tools_handle_discover(const char *id) {
     const char *discover_json = 
         "{\"protocolVersion\":\"2026-07-28\",\"serverInfo\":{\"name\":\"sqlite-mcp-server\",\"version\":\"1.0.0\"},\"capabilities\":{\"tools\":{\"listChanged\":false}}}";
