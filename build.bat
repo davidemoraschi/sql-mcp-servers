@@ -1,7 +1,7 @@
 @echo off
-echo ===================================================
+echo =======================================
 echo Building Standalone SQLite MCP Server for Windows
-echo ===================================================
+echo =======================================
 
 where cl >nul 2>nul
 if %ERRORLEVEL% NEQ 0 goto TRY_CMAKE
@@ -9,12 +9,29 @@ if %ERRORLEVEL% NEQ 0 goto TRY_CMAKE
 echo [INFO] Found MSVC compiler (cl.exe). Compiling Release binary...
 if not exist bin mkdir bin
 cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /DNDEBUG /DSQLITE_THREADSAFE=0 /DSQLITE_OMIT_LOAD_EXTENSION /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude src\main.c src\json_rpc.c src\rdbms_tools.c src\db_sqlite.c /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\sqlite-mcp-server.exe
-if %ERRORLEVEL% EQU 0 (
-    echo [SUCCESS] Binary compiled successfully: bin\sqlite-mcp-server.exe
-    exit /b 0
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Server compilation failed.
+    exit /b 1
 )
-echo [ERROR] MSVC compilation failed.
-exit /b 1
+
+echo [INFO] Compiling Test Runner...
+cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude src\test_runner.c /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\mcp_test_runner.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Test runner compilation failed.
+    exit /b 1
+)
+
+echo ===================================================
+echo Running Integration Tests...
+echo ===================================================
+bin\mcp_test_runner.exe bin\sqlite-mcp-server.exe
+if %ERRORLEVEL% EQU 0 (
+    echo [SUCCESS] Build and all integration tests passed!
+    exit /b 0
+) else (
+    echo [ERROR] Integration tests failed.
+    exit /b 1
+)
 
 :TRY_CMAKE
 where cmake >nul 2>nul
@@ -30,11 +47,18 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 cmake --build . --config Release
-cd ..
+if %ERRORLEVEL% NEQ 0 (
+    cd ..
+    echo [ERROR] CMake build failed.
+    exit /b 1
+)
+Release\mcp_test_runner.exe Release\sqlite-mcp-server.exe
 if %ERRORLEVEL% EQU 0 (
-    echo [SUCCESS] CMake build completed successfully.
+    cd ..
+    echo [SUCCESS] CMake build and integration tests passed!
     exit /b 0
 )
+cd ..
 exit /b 1
 
 :NO_TOOLS

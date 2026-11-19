@@ -17,9 +17,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#if defined(_WIN32) && !defined(strdup)
-  #define strdup _strdup
-#endif
+
 
 typedef struct {
     char *db_path;

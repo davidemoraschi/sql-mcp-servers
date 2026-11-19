@@ -1,4 +1,4 @@
-name: CI Build
+name: CI Build & Integration Test
 
 on:
   push:
@@ -8,26 +8,27 @@ on:
 
 jobs:
   build-linux:
-    name: Build Linux (64-bit)
+    name: Build & Test Linux (64-bit)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Build with Shell Script
+      - name: Build and Test with Shell Script
         run: |
           chmod +x build.sh
           ./build.sh
 
-      - name: Build with CMake (Release)
+      - name: Build and Test with CMake (Release)
         run: |
           mkdir build-cmake
           cd build-cmake
           cmake -DCMAKE_BUILD_TYPE=Release ..
           cmake --build .
+          ./mcp_test_runner ./sqlite-mcp-server
 
   build-windows:
-    name: Build Windows (64-bit MSVC)
+    name: Build & Test Windows (64-bit MSVC)
     runs-on: windows-latest
     steps:
       - name: Checkout Repository
@@ -36,17 +37,18 @@ jobs:
       - name: Set up MSVC Developer Command Prompt
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Build with Batch Script
-        run: .\build.bat
+      - name: Build and Test with Batch Script (Release)
+        run: build.bat
 
-      - name: Build with CMake (Release)
+      - name: Build and Test with CMake (Release)
         run: |
           mkdir build-cmake
           cd build-cmake
           cmake -DCMAKE_BUILD_TYPE=Release ..
           cmake --build . --config Release
+          .\Release\mcp_test_runner.exe .\Release\sqlite-mcp-server.exe
 
-      - name: Build with CMake (Debug)
+      - name: Build with CMake (Debug - Build Only)
         run: |
           mkdir build-cmake-debug
           cd build-cmake-debug

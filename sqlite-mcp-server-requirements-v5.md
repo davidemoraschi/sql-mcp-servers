@@ -1,4 +1,4 @@
-# Requirements Specification: Standalone ANSI C SQLite Model Context Protocol (MCP) Server (v4)
+# Requirements Specification: Standalone ANSI C SQLite Model Context Protocol (MCP) Server (v5)
 
 ## 1. System Purpose and Scope
 
@@ -134,7 +134,9 @@ No individual application source file (`.c`) or header file (`.h`) shall exceed 
 To prevent re-introducing architectural, build, or syntax bugs that were previously diagnosed and resolved, the codebase must strictly adhere to the following rules:
 
 ### 8.1 Control Character Escaping in Script-Generated Code
-* **Historical Issue**: Path strings containing backslashes followed by specific letters (e.g., `srcdbms_tools.c`) were evaluated as ASCII control characters (`` as Carriage Return `0x0D`), corrupting file paths to `srcdbms_tools.c` and triggering MSVC error `C1083: Cannot open source file`.
+* **Historical Issue**: Path strings containing backslashes followed by specific letters (e.g., `src
+dbms_tools.c`) were evaluated as ASCII control characters (`
+` as Carriage Return `0x0D`), corrupting file paths to `srcdbms_tools.c` and triggering MSVC error `C1083: Cannot open source file`.
 * **Mandatory Rule**: All script-generated file paths must explicitly double-escape backslashes (`src\rdbms_tools.c`) or use raw byte arrays to prevent string generators from expanding control characters.
 
 ### 8.2 JSON String Literal Quote Escaping in C

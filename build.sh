@@ -27,4 +27,21 @@ $CC -std=c11 -O2 -flto -fomit-frame-pointer \
     -Wl,--gc-sections -Wl,-s \
     -o bin/sqlite-mcp-server -lm -lpthread
 
-echo "[SUCCESS] Binary compiled successfully: bin/sqlite-mcp-server"
+echo "[SUCCESS] Server compiled: bin/sqlite-mcp-server"
+
+echo "[INFO] Compiling Test Runner..."
+$CC -std=c11 -O2 -flto -fomit-frame-pointer \
+    -ffunction-sections -fdata-sections \
+    -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE \
+    -Iinclude \
+    src/test_runner.c \
+    -Wl,--gc-sections -Wl,-s \
+    -o bin/mcp_test_runner -lm -lpthread
+
+echo "[SUCCESS] Test Runner compiled: bin/mcp_test_runner"
+
+echo "==================================================="
+echo "Running Integration Tests..."
+echo "==================================================="
+./bin/mcp_test_runner ./bin/sqlite-mcp-server
+echo "[SUCCESS] All integration tests passed!"
