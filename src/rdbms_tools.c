@@ -79,9 +79,9 @@ static void send_tool_response(const char *id, DbQueryResult *res) {
     }
 
     char *esc_md = json_escape_string(res->markdown_table);
-    const char *struct_json = (res->json_structured && res->json_structured[0]) ? res->json_structured : "[]";
+    const char *rows_json = (res->json_structured && res->json_structured[0]) ? res->json_structured : "[]";
 
-    size_t len = (esc_md ? strlen(esc_md) : 0) + strlen(struct_json) + 512;
+    size_t len = (esc_md ? strlen(esc_md) : 0) + strlen(rows_json) + 512;
     char *out_buf = (char *)malloc(len);
     if (!out_buf) {
         if (esc_md) free(esc_md);
@@ -94,9 +94,9 @@ static void send_tool_response(const char *id, DbQueryResult *res) {
         "{"
           "\"resultType\":\"complete\","
           "\"content\":[{\"type\":\"text\",\"text\":\"%s\"}],"
-          "\"structuredContent\":%s"
+          "\"structuredContent\":{\"rows\":%s}"
         "}",
-        esc_md ? esc_md : "", struct_json);
+        esc_md ? esc_md : "", rows_json);
 
     json_rpc_send_result(id, out_buf);
     if (esc_md) free(esc_md);
