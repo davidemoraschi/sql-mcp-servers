@@ -42,21 +42,21 @@ if(MSVC)
 else()
     target_compile_options(sqlite-mcp-server PRIVATE
         -Wall -Wextra
-        $<$<CONFIG:Release>:-O2 -flto -fomit-frame-pointer -ffunction-sections -fdata-sections>
-        $<$<CONFIG:MinSizeRel>:-Os -flto -fomit-frame-pointer -ffunction-sections -fdata-sections>
+        $<$<CONFIG:Release>:-O2  -fomit-frame-pointer -ffunction-sections -fdata-sections>
+        $<$<CONFIG:MinSizeRel>:-Os  -fomit-frame-pointer -ffunction-sections -fdata-sections>
     )
     target_link_options(sqlite-mcp-server PRIVATE
-        $<$<CONFIG:Release>:-O2 -flto -Wl,--gc-sections -Wl,-s>
-        $<$<CONFIG:MinSizeRel>:-Os -flto -Wl,--gc-sections -Wl,-s>
+        $<$<CONFIG:Release>:-O2  -Wl,--gc-sections -Wl,-s>
+        $<$<CONFIG:MinSizeRel>:-Os  -Wl,--gc-sections -Wl,-s>
     )
 
     target_compile_options(mcp_test_runner PRIVATE
         -Wall -Wextra
-        $<$<CONFIG:Release>:-O2 -flto -fomit-frame-pointer -ffunction-sections -fdata-sections>
-        $<$<CONFIG:MinSizeRel>:-Os -flto -fomit-frame-pointer -ffunction-sections -fdata-sections>
+        $<$<CONFIG:Release>:-O2  -fomit-frame-pointer -ffunction-sections -fdata-sections>
+        $<$<CONFIG:MinSizeRel>:-Os  -fomit-frame-pointer -ffunction-sections -fdata-sections>
     )
     target_link_options(mcp_test_runner PRIVATE
-        $<$<CONFIG:Release>:-O2 -flto -Wl,--gc-sections -Wl,-s>
-        $<$<CONFIG:MinSizeRel>:-Os -flto -Wl,--gc-sections -Wl,-s>
+        $<$<CONFIG:Release>:-O2  -Wl,--gc-sections -Wl,-s>
+        $<$<CONFIG:MinSizeRel>:-Os  -Wl,--gc-sections -Wl,-s>
     )
 endif()
