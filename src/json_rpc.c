@@ -222,7 +222,7 @@ bool json_rpc_parse_request(const char *input, JsonRpcRequest *req) {
 
 void json_rpc_free_request(JsonRpcRequest *req) {
     if (req && req->params) {
-        json_free(req->params);
+        json_free((JsonValue *)req->params);
         req->params = NULL;
     }
 }
