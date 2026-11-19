@@ -1,4 +1,4 @@
-# Requirements Specification: Standalone ANSI C SQLite Model Context Protocol (MCP) Server (v7)
+# Requirements Specification: Standalone ANSI C SQLite Model Context Protocol (MCP) Server (v8)
 
 ## 1. System Purpose and Scope
 

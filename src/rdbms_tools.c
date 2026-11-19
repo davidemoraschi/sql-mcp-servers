@@ -25,16 +25,16 @@ void tools_handle_discover(const char *id) {
 void tools_handle_list(const char *id) {
     const char *list_json = 
         "{\"ttlMs\":300000,\"cacheScope\":\"public\",\"tools\":["
-        "{\"name\":\"read_query\",\"description\":\"Execute read-only SQL SELECT queries\",\"readOnlyHint\":true},"
-        "{\"name\":\"write_query\",\"description\":\"Execute SQL modification queries (INSERT/UPDATE/DELETE)\",\"idempotentHint\":false},"
-        "{\"name\":\"backup_database\",\"description\":\"Create online database backup\",\"readOnlyHint\":true},"
-        "{\"name\":\"explain_query\",\"description\":\"Inspect query execution plan\",\"readOnlyHint\":true},"
-        "{\"name\":\"describe_table\",\"description\":\"Describe table schema, columns, types, and keys\",\"readOnlyHint\":true},"
-        "{\"name\":\"infer_relationships\",\"description\":\"Infer primary/foreign key relationships across tables\",\"readOnlyHint\":true},"
-        "{\"name\":\"generate_erd\",\"description\":\"Generate PlantUML ERD schema diagram\",\"readOnlyHint\":true},"
-        "{\"name\":\"list_tables\",\"description\":\"List all database tables and views\",\"readOnlyHint\":true},"
-        "{\"name\":\"export_data\",\"description\":\"Export database table contents (CSV/JSON)\",\"readOnlyHint\":true},"
-        "{\"name\":\"check_database_health\",\"description\":\"Check database integrity and key constraints\",\"readOnlyHint\":true}"
+        "{\"name\":\"read_query\",\"description\":\"Execute read-only SQL SELECT queries against the SQLite database\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL SELECT statement to execute\"}},\"required\":[\"sql\"]},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"write_query\",\"description\":\"Execute SQL modification queries (INSERT/UPDATE/DELETE/CREATE)\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL modification query to execute\"}},\"required\":[\"sql\"]},\"annotations\":{\"idempotentHint\":false}},"
+        "{\"name\":\"backup_database\",\"description\":\"Create an online point-in-time backup of the database\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"target_path\":{\"type\":\"string\",\"description\":\"Destination file path for backup\"}},\"required\":[\"target_path\"]},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"explain_query\",\"description\":\"Inspect the query execution plan for a SQL query\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL statement to evaluate\"}},\"required\":[\"sql\"]},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"describe_table\",\"description\":\"Describe table schema, columns, data types, nullability, and primary keys\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"table_name\":{\"type\":\"string\",\"description\":\"Target relational table name\"}},\"required\":[\"table_name\"]},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"infer_relationships\",\"description\":\"Infer primary and foreign key relationships across database tables\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"generate_erd\",\"description\":\"Generate PlantUML ERD schema diagram of the database\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"list_tables\",\"description\":\"List all database tables, views, and row counts\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"export_data\",\"description\":\"Export database table contents to CSV or JSON format\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"table_name\":{\"type\":\"string\",\"description\":\"Table name to export\"},\"format\":{\"type\":\"string\",\"enum\":[\"csv\",\"json\"],\"description\":\"Export format\"}},\"required\":[\"table_name\",\"format\"]},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"check_database_health\",\"description\":\"Check database integrity, foreign key consistency, and size\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}}"
         "]}";
     json_rpc_send_result(id, list_json);
 }
