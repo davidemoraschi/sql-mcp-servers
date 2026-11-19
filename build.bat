@@ -26,10 +26,10 @@ rem echo Running Integration Tests...
 rem echo ===================================================
 rem bin\mcp_test_runner.exe bin\sqlite-mcp-server.exe
 if %ERRORLEVEL% EQU 0 (
-    echo [SUCCESS] Build and all integration tests passed!
+    echo [SUCCESS] Build passed!
     exit /b 0
 ) else (
-    echo [ERROR] Integration tests failed.
+    echo [ERROR] Build failed.
     exit /b 1
 )
 
