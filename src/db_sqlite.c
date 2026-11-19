@@ -22,10 +22,8 @@
 #endif
 
 #ifndef HAVE_SQLITE3
-  #ifdef HAS_EMBEDDED_SQLITE
-    #include "sqlite3.h"
-    #define HAVE_SQLITE3 1
-  #endif
+  #include "sqlite3.h"
+  #define HAVE_SQLITE3 1
 #endif
 
 #ifdef HAVE_SQLITE3

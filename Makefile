@@ -1,6 +1,6 @@
 # Cross-Platform Makefile for Standalone SQLite MCP Server & Test Runner
 CC ?= gcc
-CFLAGS ?= -std=c11 -O2 -flto -fomit-frame-pointer -ffunction-sections -fdata-sections -Wall -Wextra -DNDEBUG -DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_LOAD_EXTENSION -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE -Iinclude
+CFLAGS ?= -std=c11 -O2 -flto -fomit-frame-pointer -ffunction-sections -fdata-sections -Wall -Wextra -DNDEBUG -DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_LOAD_EXTENSION -DHAS_EMBEDDED_SQLITE -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE -Iinclude
 LDFLAGS ?= -O2 -flto -Wl,--gc-sections -Wl,-s
 
 SRCS = src/main.c src/json_rpc.c src/rdbms_tools.c src/db_sqlite.c src/sqlite3.c
@@ -14,10 +14,10 @@ TEST_TARGET = mcp_test_runner
 all: $(TARGET) $(TEST_TARGET)
 
 $(TARGET): $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $^
+	$(CC) $(LDFLAGS) -o $@ $^ -lm -lpthread
 
 $(TEST_TARGET): $(TEST_OBJS)
-	$(CC) $(LDFLAGS) -o $@ $^
+	$(CC) $(LDFLAGS) -o $@ $^ -lm -lpthread
 
 src/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
