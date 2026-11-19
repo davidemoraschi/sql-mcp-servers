@@ -2,9 +2,9 @@ name: CI Build & Integration Test
 
 on:
   push:
-    branches: [ '**' ]
+    branches: [ ** ]
   pull_request:
-    branches: [ '**' ]
+    branches: [ ** ]
 
 jobs:
   build-linux:
@@ -14,18 +14,33 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Build and Test with Shell Script
+      - name: Build with Shell Script
         run: |
           chmod +x build.sh
           ./build.sh
 
-      - name: Build and Test with CMake (Release)
+      - name: Download Chinook SQLite Test Database
+        run: |
+          curl -sSL -o Chinook_Sqlite.sqlite https://github.com/lerocha/chinook-database/releases/download/v1.4.5/Chinook_Sqlite.sqlite
+
+      - name: Run Integration Tests on Chinook Database (Shell Build)
+        env:
+          SQLITE_DB_PATH: ${{ github.workspace }}/Chinook_Sqlite.sqlite
+        run: |
+          ./bin/mcp_test_runner ./bin/sqlite-mcp-server
+
+      - name: Build with CMake (Release)
         run: |
           mkdir build-cmake
           cd build-cmake
           cmake -DCMAKE_BUILD_TYPE=Release ..
           cmake --build .
-          ./mcp_test_runner ./sqlite-mcp-server
+
+      - name: Run Integration Tests on Chinook Database (CMake Build)
+        env:
+          SQLITE_DB_PATH: ${{ github.workspace }}/Chinook_Sqlite.sqlite
+        run: |
+          ./build-cmake/mcp_test_runner ./build-cmake/sqlite-mcp-server
 
   build-windows:
     name: Build & Test Windows (64-bit MSVC)
@@ -37,17 +52,30 @@ jobs:
       - name: Set up MSVC Developer Command Prompt
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Build and Test with Batch Script (Release)
+      - name: Build with Batch Script (Release)
         run: ./build.bat
 
-      - name: Build and Test with CMake (Release)
+      - name: Download Chinook SQLite Test Database
+        run: |
+          curl.exe -sSL -o Chinook_Sqlite.sqlite https://github.com/lerocha/chinook-database/releases/download/v1.4.5/Chinook_Sqlite.sqlite
+
+      - name: Run Integration Tests on Chinook Database (Batch Build)
+        env:
+          SQLITE_DB_PATH: ${{ github.workspace }}/Chinook_Sqlite.sqlite
+        run: bin\mcp_test_runner.exe bin\sqlite-mcp-server.exe
+
+      - name: Build with CMake (Release)
         run: |
           mkdir build-cmake
           cd build-cmake
           cmake -DCMAKE_BUILD_TYPE=Release ..
           cmake --build . --config Release
-          .\Release\mcp_test_runner.exe .\Release\sqlite-mcp-server.exe
+
       - name: Run Integration Tests on Chinook Database (CMake Release)
+        env:
+          SQLITE_DB_PATH: ${{ github.workspace }}/Chinook_Sqlite.sqlite
+        run: |
+          .\build-cmake\Release\mcp_test_runner.exe .\build-cmake\Release\sqlite-mcp-server.exe
 
       - name: Build with CMake (Debug - Build Only)
         run: |
