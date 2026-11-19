@@ -2,7 +2,7 @@
  * test_runner.c - Automated Integration Test Harness Console Application
  *
  * Spawns sqlite-mcp-server process over STDIO IPC, sends JSON-RPC requests,
- * and asserts strict protocol compliance.
+ * and asserts strict protocol compliance for dual-channel payloads (content + structuredContent).
  */
 
 #include <stdio.h>
@@ -152,16 +152,20 @@ static void close_server(ProcessPipe *proc) {
 #endif
 }
 
-int main(int argc, char **argv) {
-    const char *server_exe = (argc > 1) ? argv[1] :
-#ifdef _WIN32
-        "bin\\sqlite-mcp-server.exe";
-#else
-        "./bin/sqlite-mcp-server";
-#endif
+static bool verify_dual_channel_payload(const char *resp, int expected_id) {
+    char id_pattern[32];
+    snprintf(id_pattern, sizeof(id_pattern), "\"id\":%d", expected_id);
+    return (strstr(resp, id_pattern) != NULL) &&
+           (strstr(resp, "\"resultType\":\"complete\"") != NULL) &&
+           (strstr(resp, "\"content\":[") != NULL) &&
+           (strstr(resp, "\"type\":\"text\"") != NULL) &&
+           (strstr(resp, "\"structuredContent\":") != NULL);
+}
 
+int main(int argc, char **argv) {
+    const char *server_exe = (argc > 1) ? argv[1] : "./bin/sqlite-mcp-server";
     printf("===================================================\n");
-    printf("MCP Integration Test Runner\n");
+    printf("MCP Integration Test Runner (Chinook Test Suite)\n");
     printf("Target Server: %s\n", server_exe);
     printf("===================================================\n\n");
 
@@ -173,10 +177,10 @@ int main(int argc, char **argv) {
 
     int passed = 0;
     int failed = 0;
-    char resp[4096];
+    char resp[8192];
 
     /* TC-01: Legacy 2025-11-25 Handshake */
-    printf("[TC-01] Testing legacy initialize handshake... ");
+    printf("[TC-01] Legacy initialize handshake (2025-11-25)... ");
     send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-11-25\"}}");
     if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":1") && strstr(resp, "protocolVersion")) {
         printf("PASS\n"); passed++;
@@ -185,7 +189,7 @@ int main(int argc, char **argv) {
     }
 
     /* TC-02: System Ping */
-    printf("[TC-02] Testing system ping... ");
+    printf("[TC-02] System ping... ");
     send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"ping\"}");
     if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":2") && strstr(resp, "\"result\":{}")) {
         printf("PASS\n"); passed++;
@@ -194,7 +198,7 @@ int main(int argc, char **argv) {
     }
 
     /* TC-03: Modern 2026-07-28 Discovery */
-    printf("[TC-03] Testing modern server/discover... ");
+    printf("[TC-03] Modern server/discover (2026-07-28)... ");
     send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"server/discover\"}");
     if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":3") && strstr(resp, "2026-07-28")) {
         printf("PASS\n"); passed++;
@@ -203,7 +207,7 @@ int main(int argc, char **argv) {
     }
 
     /* TC-04: Tool Discovery */
-    printf("[TC-04] Testing tools/list discovery... ");
+    printf("[TC-04] Tool discovery (tools/list)... ");
     send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"tools/list\"}");
     if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":4") && strstr(resp, "read_query")) {
         printf("PASS\n"); passed++;
@@ -211,37 +215,73 @@ int main(int argc, char **argv) {
         printf("FAIL (Resp: %s)\n", resp); failed++;
     }
 
-    /* TC-05: Read Query Execution */
-    printf("[TC-05] Testing tools/call read_query... ");
+    /* TC-05: Basic Read Query Dual-Channel Verification */
+    printf("[TC-05] Basic read_query dual-channel check (SELECT 1)... ");
     send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"tools/call\",\"params\":{\"name\":\"read_query\",\"arguments\":{\"sql\":\"SELECT 1;\"}}}");
-    if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":5") && strstr(resp, "resultType")) {
+    if (read_json_line(&proc, resp, sizeof(resp)) && verify_dual_channel_payload(resp, 5)) {
         printf("PASS\n"); passed++;
     } else {
         printf("FAIL (Resp: %s)\n", resp); failed++;
     }
 
-    /* TC-06: Missing Parameter Error Handling */
-    printf("[TC-06] Testing missing parameters error handling... ");
-    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\"}");
-    if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":6") && strstr(resp, "error")) {
+    /* TC-06: Chinook Query - Artist Table */
+    printf("[TC-06] Chinook query - Artist table... ");
+    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"tools/call\",\"params\":{\"name\":\"read_query\",\"arguments\":{\"sql\":\"SELECT * FROM Artist LIMIT 5;\"}}}");
+    if (read_json_line(&proc, resp, sizeof(resp)) && verify_dual_channel_payload(resp, 6)) {
         printf("PASS\n"); passed++;
     } else {
         printf("FAIL (Resp: %s)\n", resp); failed++;
     }
 
-    /* TC-07: Malicious Identifier Sanitization */
-    printf("[TC-07] Testing identifier sanitization... ");
-    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"describe_table\",\"arguments\":{\"table_name\":\"users; DROP TABLE users;\"}}}");
-    if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":7")) {
+    /* TC-07: Chinook Query - Track & Album Join */
+    printf("[TC-07] Chinook query - Track & Album JOIN... ");
+    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"tools/call\",\"params\":{\"name\":\"read_query\",\"arguments\":{\"sql\":\"SELECT t.Name AS Track, a.Title AS Album FROM Track t JOIN Album a ON t.AlbumId = a.AlbumId LIMIT 5;\"}}}");
+    if (read_json_line(&proc, resp, sizeof(resp)) && verify_dual_channel_payload(resp, 7)) {
         printf("PASS\n"); passed++;
     } else {
         printf("FAIL (Resp: %s)\n", resp); failed++;
     }
 
-    /* TC-08: Unknown Method Handling */
-    printf("[TC-08] Testing unknown method error handling... ");
-    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"unknown_method\"}");
-    if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":8") && strstr(resp, "error")) {
+    /* TC-08: Chinook Table Inspection - Describe Artist Table */
+    printf("[TC-08] Chinook schema - describe_table (Artist)... ");
+    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"tools/call\",\"params\":{\"name\":\"describe_table\",\"arguments\":{\"table_name\":\"Artist\"}}}");
+    if (read_json_line(&proc, resp, sizeof(resp)) && verify_dual_channel_payload(resp, 8)) {
+        printf("PASS\n"); passed++;
+    } else {
+        printf("FAIL (Resp: %s)\n", resp); failed++;
+    }
+
+    /* TC-09: Chinook Data Export - Genre Table JSON Export */
+    printf("[TC-09] Chinook data export - export_data (Genre)... ");
+    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"export_data\",\"arguments\":{\"table_name\":\"Genre\",\"format\":\"json\"}}}");
+    if (read_json_line(&proc, resp, sizeof(resp)) && verify_dual_channel_payload(resp, 9)) {
+        printf("PASS\n"); passed++;
+    } else {
+        printf("FAIL (Resp: %s)\n", resp); failed++;
+    }
+
+    /* TC-10: Missing Parameters Error Handling */
+    printf("[TC-10] Missing parameters error handling... ");
+    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"tools/call\"}");
+    if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":10") && strstr(resp, "error")) {
+        printf("PASS\n"); passed++;
+    } else {
+        printf("FAIL (Resp: %s)\n", resp); failed++;
+    }
+
+    /* TC-11: Malicious Identifier Sanitization */
+    printf("[TC-11] Identifier sanitization check... ");
+    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tools/call\",\"params\":{\"name\":\"describe_table\",\"arguments\":{\"table_name\":\"users; DROP TABLE users;\"}}}");
+    if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":11")) {
+        printf("PASS\n"); passed++;
+    } else {
+        printf("FAIL (Resp: %s)\n", resp); failed++;
+    }
+
+    /* TC-12: Unknown Method Error Handling */
+    printf("[TC-12] Unknown method error handling... ");
+    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"unknown_method\"}");
+    if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":12") && strstr(resp, "error")) {
         printf("PASS\n"); passed++;
     } else {
         printf("FAIL (Resp: %s)\n", resp); failed++;
