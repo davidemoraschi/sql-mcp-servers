@@ -10,11 +10,9 @@
 #include "rdbms_tools.h"
 #include "db_sqlite.h"
 
-void tools_handle_initialize(const char* id) {
-    const char* init_json =
-        "{\"protocolVersion\":\"2024-11-05\","
-        "\"serverInfo\":{\"name\":\"sqlite-mcp-server\",\"version\":\"1.0.0\"},"
-        "\"capabilities\":{\"tools\":{\"listChanged\":false}}}";
+void tools_handle_initialize(const char *id) {
+    const char *init_json = 
+        "{\"protocolVersion\":\"2025-11-25\",\"serverInfo\":{\"name\":\"sqlite-mcp-server\",\"version\":\"1.0.0\"},\"capabilities\":{\"tools\":{\"listChanged\":false}}}";
     json_rpc_send_result(id, init_json);
 }
 
@@ -27,20 +25,51 @@ void tools_handle_discover(const char *id) {
 void tools_handle_list(const char *id) {
     const char *list_json = 
         "{\"ttlMs\":300000,\"cacheScope\":\"public\",\"tools\":["
-        "{\"name\":\"read_query\",\"description\":\"Execute read-only SQL SELECT queries\",\"readOnlyHint\":true},"
-        "{\"name\":\"write_query\",\"description\":\"Execute SQL modification queries (INSERT/UPDATE/DELETE)\",\"idempotentHint\":false},"
-        "{\"name\":\"backup_database\",\"description\":\"Create online database backup\",\"readOnlyHint\":true},"
-        "{\"name\":\"explain_query\",\"description\":\"Inspect query execution plan\",\"readOnlyHint\":true},"
-        "{\"name\":\"describe_table\",\"description\":\"Describe table schema, columns, types, and keys\",\"readOnlyHint\":true},"
-        "{\"name\":\"infer_relationships\",\"description\":\"Infer primary/foreign key relationships across tables\",\"readOnlyHint\":true},"
-        "{\"name\":\"generate_erd\",\"description\":\"Generate PlantUML ERD schema diagram\",\"readOnlyHint\":true},"
-        "{\"name\":\"list_tables\",\"description\":\"List all database tables and views\",\"readOnlyHint\":true},"
-        "{\"name\":\"export_data\",\"description\":\"Export database table contents (CSV/JSON)\",\"readOnlyHint\":true},"
-        "{\"name\":\"check_database_health\",\"description\":\"Check database integrity and key constraints\",\"readOnlyHint\":true}"
+        "{\"name\":\"read_query\",\"description\":\"Execute read-only SQL SELECT queries against the SQLite database\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL SELECT statement to execute\"}},\"required\":[\"sql\"]},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"write_query\",\"description\":\"Execute SQL modification queries (INSERT/UPDATE/DELETE/CREATE)\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL modification query to execute\"}},\"required\":[\"sql\"]},\"annotations\":{\"idempotentHint\":false}},"
+        "{\"name\":\"backup_database\",\"description\":\"Create an online point-in-time backup of the database\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"target_path\":{\"type\":\"string\",\"description\":\"Destination file path for backup\"}},\"required\":[\"target_path\"]},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"explain_query\",\"description\":\"Inspect the query execution plan for a SQL query\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL statement to evaluate\"}},\"required\":[\"sql\"]},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"describe_table\",\"description\":\"Describe table schema, columns, data types, nullability, and primary keys\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"table_name\":{\"type\":\"string\",\"description\":\"Target relational table name\"}},\"required\":[\"table_name\"]},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"infer_relationships\",\"description\":\"Infer primary and foreign key relationships across database tables\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"generate_erd\",\"description\":\"Generate PlantUML ERD schema diagram of the database\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"list_tables\",\"description\":\"List all database tables, views, and row counts\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"export_data\",\"description\":\"Export database table contents to CSV or JSON format\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"table_name\":{\"type\":\"string\",\"description\":\"Table name to export\"},\"format\":{\"type\":\"string\",\"enum\":[\"csv\",\"json\"],\"description\":\"Export format\"}},\"required\":[\"table_name\",\"format\"]},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"check_database_health\",\"description\":\"Check database integrity, foreign key consistency, and size\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}}"
         "]}";
     json_rpc_send_result(id, list_json);
 }
 
+static char *json_escape_string(const char *input) {
+    if (!input) {
+        char *empty = (char *)malloc(1);
+        if (empty) empty[0] = '\0';
+        return empty;
+    }
+    size_t len = strlen(input);
+    size_t esc_len = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (input[i] == '"' || input[i] == '\\') esc_len += 2;
+        else if (input[i] == '\n') esc_len += 2;
+        else if (input[i] == '\r') esc_len += 2;
+        else if (input[i] == '\t') esc_len += 2;
+        else esc_len += 1;
+    }
+    char *out = (char *)malloc(esc_len + 1);
+    if (!out) return NULL;
+    size_t pos = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (input[i] == '"') { out[pos++] = '\\'; out[pos++] = '"'; }
+        else if (input[i] == '\\') { out[pos++] = '\\'; out[pos++] = '\\'; }
+        else if (input[i] == '\n') { out[pos++] = '\\'; out[pos++] = 'n'; }
+        else if (input[i] == '\r') { out[pos++] = '\\'; out[pos++] = 'r'; }
+        else if (input[i] == '\t') { out[pos++] = '\\'; out[pos++] = 't'; }
+        else { out[pos++] = input[i]; }
+    }
+    out[pos] = '\0';
+    return out;
+}
+
+//static void send_tool_response(const char *id, DbQueryResult *res) {
 static void send_tool_response(const char *id, DbQueryResult *res) {
     if (!res->success) {
         char err_json[512];
@@ -50,9 +79,26 @@ static void send_tool_response(const char *id, DbQueryResult *res) {
         return;
     }
 
-    size_t len = strlen(res->markdown_table) + strlen(res->json_structured) + 512;
+    char *esc_md = json_escape_string(res->markdown_table);
+    const char *struct_raw = (res->json_structured && res->json_structured[0]) ? res->json_structured : "[]";
+
+    /* Guarantee structuredContent is a JSON Object (Record) per MCP 2026-07-28 spec */
+    char *rows_obj = NULL;
+    if (struct_raw[0] == '[') {
+        size_t rlen = strlen(struct_raw) + 32;
+        rows_obj = (char *)malloc(rlen);
+        if (rows_obj) {
+            snprintf(rows_obj, rlen, "{\"rows\":%s}", struct_raw);
+        }
+    }
+
+    const char *struct_json = rows_obj ? rows_obj : (struct_raw[0] == '{' ? struct_raw : "{}");
+
+    size_t len = (esc_md ? strlen(esc_md) : 0) + strlen(struct_json) + 512;
     char *out_buf = (char *)malloc(len);
     if (!out_buf) {
+        if (esc_md) free(esc_md);
+        if (rows_obj) free(rows_obj);
         json_rpc_send_error(id, JSONRPC_ERR_INTERNAL, "Out of memory", NULL);
         db_free_result(res);
         return;
@@ -64,9 +110,11 @@ static void send_tool_response(const char *id, DbQueryResult *res) {
           "\"content\":[{\"type\":\"text\",\"text\":\"%s\"}],"
           "\"structuredContent\":%s"
         "}",
-        res->markdown_table, res->json_structured);
+        esc_md ? esc_md : "", struct_json);
 
     json_rpc_send_result(id, out_buf);
+    if (esc_md) free(esc_md);
+    if (rows_obj) free(rows_obj);
     free(out_buf);
     db_free_result(res);
 }

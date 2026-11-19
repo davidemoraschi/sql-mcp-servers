@@ -8,7 +8,7 @@ if %ERRORLEVEL% NEQ 0 goto TRY_CMAKE
 
 echo [INFO] Found MSVC compiler (cl.exe). Compiling Release binary...
 if not exist bin mkdir bin
-cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /DNDEBUG /DSQLITE_THREADSAFE=0 /DSQLITE_OMIT_LOAD_EXTENSION /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude src\main.c src\json_rpc.c src\rdbms_tools.c src\db_sqlite.c /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\sqlite-mcp-server.exe
+cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /DNDEBUG /DSQLITE_THREADSAFE=0 /DSQLITE_OMIT_LOAD_EXTENSION /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude src\main.c src\json_rpc.c src\rdbms_tools.c src\db_sqlite.c src\sqlite3.c /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\sqlite-mcp-server.exe
 if %ERRORLEVEL% EQU 0 (
     echo [SUCCESS] Binary compiled successfully: bin\sqlite-mcp-server.exe
     exit /b 0
