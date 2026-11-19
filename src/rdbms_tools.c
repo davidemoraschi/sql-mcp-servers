@@ -39,6 +39,36 @@ void tools_handle_list(const char *id) {
     json_rpc_send_result(id, list_json);
 }
 
+static char *json_escape_string(const char *input) {
+    if (!input) {
+        char *empty = (char *)malloc(1);
+        if (empty) empty[0] = '\0';
+        return empty;
+    }
+    size_t len = strlen(input);
+    size_t esc_len = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (input[i] == '"' || input[i] == '\\') esc_len += 2;
+        else if (input[i] == '\n') esc_len += 2;
+        else if (input[i] == '\r') esc_len += 2;
+        else if (input[i] == '\t') esc_len += 2;
+        else esc_len += 1;
+    }
+    char *out = (char *)malloc(esc_len + 1);
+    if (!out) return NULL;
+    size_t pos = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (input[i] == '"') { out[pos++] = '\\'; out[pos++] = '"'; }
+        else if (input[i] == '\\') { out[pos++] = '\\'; out[pos++] = '\\'; }
+        else if (input[i] == '\n') { out[pos++] = '\\'; out[pos++] = 'n'; }
+        else if (input[i] == '\r') { out[pos++] = '\\'; out[pos++] = 'r'; }
+        else if (input[i] == '\t') { out[pos++] = '\\'; out[pos++] = 't'; }
+        else { out[pos++] = input[i]; }
+    }
+    out[pos] = '\0';
+    return out;
+}
+
 static void send_tool_response(const char *id, DbQueryResult *res) {
     if (!res->success) {
         char err_json[512];
@@ -48,9 +78,13 @@ static void send_tool_response(const char *id, DbQueryResult *res) {
         return;
     }
 
-    size_t len = strlen(res->markdown_table) + strlen(res->json_structured) + 512;
+    char *esc_md = json_escape_string(res->markdown_table);
+    const char *struct_json = (res->json_structured && res->json_structured[0]) ? res->json_structured : "[]";
+
+    size_t len = (esc_md ? strlen(esc_md) : 0) + strlen(struct_json) + 512;
     char *out_buf = (char *)malloc(len);
     if (!out_buf) {
+        if (esc_md) free(esc_md);
         json_rpc_send_error(id, JSONRPC_ERR_INTERNAL, "Out of memory", NULL);
         db_free_result(res);
         return;
@@ -62,9 +96,10 @@ static void send_tool_response(const char *id, DbQueryResult *res) {
           "\"content\":[{\"type\":\"text\",\"text\":\"%s\"}],"
           "\"structuredContent\":%s"
         "}",
-        res->markdown_table, res->json_structured);
+        esc_md ? esc_md : "", struct_json);
 
     json_rpc_send_result(id, out_buf);
+    if (esc_md) free(esc_md);
     free(out_buf);
     db_free_result(res);
 }
