@@ -21,17 +21,17 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-rem echo ===================================================
-rem echo Running Integration Tests...
-rem echo ===================================================
-rem bin\mcp_test_runner.exe bin\sqlite-mcp-server.exe
-rem if %ERRORLEVEL% EQU 0 (
-rem     echo [SUCCESS] Build and all integration tests passed!
-rem     exit /b 0
-rem ) else (
-rem     echo [ERROR] Integration tests failed.
-rem     exit /b 1
-rem )
+echo ===================================================
+echo Running Integration Tests...
+echo ===================================================
+bin\mcp_test_runner.exe bin\sqlite-mcp-server.exe
+if %ERRORLEVEL% EQU 0 (
+    echo [SUCCESS] Build and all integration tests passed!
+    exit /b 0
+) else (
+    echo [ERROR] Integration tests failed.
+    exit /b 1
+)
 
 :TRY_CMAKE
 where cmake >nul 2>nul
@@ -52,10 +52,10 @@ if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] CMake build failed.
     exit /b 1
 )
-rem Release\mcp_test_runner.exe Release\sqlite-mcp-server.exe
+Release\mcp_test_runner.exe Release\sqlite-mcp-server.exe
 if %ERRORLEVEL% EQU 0 (
     cd ..
-    echo [SUCCESS] CMake build passed!
+    echo [SUCCESS] CMake build and integration tests passed!
     exit /b 0
 )
 cd ..
