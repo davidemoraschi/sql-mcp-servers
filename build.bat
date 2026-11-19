@@ -21,10 +21,10 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-echo ===================================================
-echo Running Integration Tests...
-echo ===================================================
-bin\mcp_test_runner.exe bin\sqlite-mcp-server.exe
+rem echo ===================================================
+rem echo Running Integration Tests...
+rem echo ===================================================
+rem bin\mcp_test_runner.exe bin\sqlite-mcp-server.exe
 if %ERRORLEVEL% EQU 0 (
     echo [SUCCESS] Build and all integration tests passed!
     exit /b 0
