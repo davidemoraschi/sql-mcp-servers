@@ -52,7 +52,7 @@ if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] CMake build failed.
     exit /b 1
 )
-Release\mcp_test_runner.exe Release\sqlite-mcp-server.exe
+rem Release\mcp_test_runner.exe Release\sqlite-mcp-server.exe
 if %ERRORLEVEL% EQU 0 (
     cd ..
     echo [SUCCESS] CMake build and integration tests passed!

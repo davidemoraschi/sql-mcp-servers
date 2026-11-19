@@ -22,7 +22,9 @@
 **
 **    
 */
+#ifdef _WIN32
 #pragma warning(disable: 4815)   
+#endif
 #ifndef SQLITE_AMALGAMATION
 #define SQLITE_CORE 1
 #define SQLITE_AMALGAMATION 1
