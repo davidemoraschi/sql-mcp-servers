@@ -53,11 +53,11 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 rem Release\mcp_test_runner.exe Release\sqlite-mcp-server.exe
-rem if %ERRORLEVEL% EQU 0 (
-rem     cd ..
-rem     echo [SUCCESS] CMake build and integration tests passed!
-rem     exit /b 0
-rem )
+if %ERRORLEVEL% EQU 0 (
+    cd ..
+    echo [SUCCESS] CMake build passed!
+    exit /b 0
+)
 cd ..
 exit /b 1
 
