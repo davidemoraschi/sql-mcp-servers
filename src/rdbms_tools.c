@@ -69,7 +69,36 @@ static char *json_escape_string(const char *input) {
     return out;
 }
 
-//static void send_tool_response(const char *id, DbQueryResult *res) {
+static char *json_escape_string(const char *input) {
+    if (!input) {
+        char *empty = (char *)malloc(1);
+        if (empty) empty[0] = '\0';
+        return empty;
+    }
+    size_t len = strlen(input);
+    size_t esc_len = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (input[i] == '"' || input[i] == '\\') esc_len += 2;
+        else if (input[i] == '\n') esc_len += 2;
+        else if (input[i] == '\r') esc_len += 2;
+        else if (input[i] == '\t') esc_len += 2;
+        else esc_len += 1;
+    }
+    char *out = (char *)malloc(esc_len + 1);
+    if (!out) return NULL;
+    size_t pos = 0;
+    for (size_t i = 0; i < len; i++) {
+        if (input[i] == '"') { out[pos++] = '\\'; out[pos++] = '"'; }
+        else if (input[i] == '\\') { out[pos++] = '\\'; out[pos++] = '\\'; }
+        else if (input[i] == '\n') { out[pos++] = '\\'; out[pos++] = 'n'; }
+        else if (input[i] == '\r') { out[pos++] = '\\'; out[pos++] = 'r'; }
+        else if (input[i] == '\t') { out[pos++] = '\\'; out[pos++] = 't'; }
+        else { out[pos++] = input[i]; }
+    }
+    out[pos] = '\0';
+    return out;
+}
+
 static void send_tool_response(const char *id, DbQueryResult *res) {
     if (!res->success) {
         char err_json[512];
@@ -108,7 +137,7 @@ static void send_tool_response(const char *id, DbQueryResult *res) {
         "{"
           "\"resultType\":\"complete\","
           "\"content\":[{\"type\":\"text\",\"text\":\"%s\"}],"
-          "\"structuredContent\":%s"
+          "\"structuredContent\":{\"rows\":%s}"
         "}",
         esc_md ? esc_md : "", struct_json);
 

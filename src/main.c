@@ -19,7 +19,7 @@
 #include "db_sqlite.h"
 #include "rdbms_tools.h"
 
-#define BUFFER_SIZE (1024 * 1024)
+#define BUFFER_SIZE (1024 * 1024) /* 1 MB stdin buffer */
 
 static void wipe_memory(void *ptr, size_t len) {
     if (!ptr || len == 0) return;
@@ -46,7 +46,7 @@ int main(int argc, char **argv) {
     (void)argc; (void)argv;
     configure_stdio_binary();
 
-    fprintf(stderr, "[INFO] Starting SQLite MCP Server (MCP 2026-07-28 / JSON-RPC 2.0)...\n");
+    fprintf(stderr, "[INFO] Starting SQLite MCP Server (Dual-Era 2024-11-05 / 2026-07-28 / JSON-RPC 2.0)...\n");
 
     const char *env_path = getenv("SQLITE_DB_PATH");
     const char *env_mode = getenv("SQLITE_OPEN_MODE");
@@ -94,14 +94,11 @@ int main(int argc, char **argv) {
 
         if (strcmp(req.method, "initialize") == 0) {
             tools_handle_initialize(req.id);
-        }
-        else if (strcmp(req.method, "notifications/initialized") == 0 || strcmp(req.method, "initialized") == 0) {
+        } else if (strcmp(req.method, "notifications/initialized") == 0 || strcmp(req.method, "initialized") == 0) {
             fprintf(stderr, "[MCP] Client sent initialized notification.\n");
-        }
-        else if (strcmp(req.method, "ping") == 0) {
+        } else if (strcmp(req.method, "ping") == 0) {
             json_rpc_send_result(req.id, "{}");
-        }
-        else if (strcmp(req.method, "server/discover") == 0) {
+        } else if (strcmp(req.method, "server/discover") == 0) {
             tools_handle_discover(req.id);
         } else if (strcmp(req.method, "tools/list") == 0) {
             tools_handle_list(req.id);

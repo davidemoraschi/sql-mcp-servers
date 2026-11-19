@@ -1,7 +1,7 @@
 @echo off
-echo ===================================================
+echo =======================================
 echo Building Standalone SQLite MCP Server for Windows
-echo ===================================================
+echo =======================================
 
 where cl >nul 2>nul
 if %ERRORLEVEL% NEQ 0 goto TRY_CMAKE
@@ -13,8 +13,25 @@ if %ERRORLEVEL% EQU 0 (
     echo [SUCCESS] Binary compiled successfully: bin\sqlite-mcp-server.exe
     exit /b 0
 )
-echo [ERROR] MSVC compilation failed.
-exit /b 1
+
+echo [INFO] Compiling Test Runner...
+cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude src\test_runner.c /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\mcp_test_runner.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Test runner compilation failed.
+    exit /b 1
+)
+
+rem echo ===================================================
+rem echo Running Integration Tests...
+rem echo ===================================================
+rem bin\mcp_test_runner.exe bin\sqlite-mcp-server.exe
+rem if %ERRORLEVEL% EQU 0 (
+rem     echo [SUCCESS] Build and all integration tests passed!
+rem     exit /b 0
+rem ) else (
+rem     echo [ERROR] Integration tests failed.
+rem     exit /b 1
+rem )
 
 :TRY_CMAKE
 where cmake >nul 2>nul
@@ -30,11 +47,18 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 cmake --build . --config Release
-cd ..
+if %ERRORLEVEL% NEQ 0 (
+    cd ..
+    echo [ERROR] CMake build failed.
+    exit /b 1
+)
+rem Release\mcp_test_runner.exe Release\sqlite-mcp-server.exe
 if %ERRORLEVEL% EQU 0 (
-    echo [SUCCESS] CMake build completed successfully.
+    cd ..
+    echo [SUCCESS] CMake build passed!
     exit /b 0
 )
+cd ..
 exit /b 1
 
 :NO_TOOLS

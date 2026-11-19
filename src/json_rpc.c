@@ -207,13 +207,24 @@ bool json_rpc_parse_request(const char *input, JsonRpcRequest *req) {
         return false;
     }
 
+    if (v_params) {
+        for (size_t i = 0; i < root->u.object.count; i++) {
+            if (root->u.object.values[i] == v_params) {
+                root->u.object.values[i] = NULL;
+                break;
+            }
+        }
+    }
     req->params = v_params;
     json_free(root);
     return true;
 }
 
 void json_rpc_free_request(JsonRpcRequest *req) {
-    (void)req;
+    if (req && req->params) {
+        json_free((JsonValue *)req->params);
+        req->params = NULL;
+    }
 }
 
 void json_rpc_send_result(const char *id, const char *result_json) {
