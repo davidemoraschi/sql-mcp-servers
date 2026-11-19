@@ -38,7 +38,7 @@ jobs:
         uses: ilammy/msvc-dev-cmd@v1
 
       - name: Build and Test with Batch Script (Release)
-        run: build.bat
+        run: ./build.bat
 
       - name: Build and Test with CMake (Release)
         run: |
