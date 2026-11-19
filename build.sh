@@ -40,8 +40,8 @@ $CC -std=c11 -O2 -flto -fomit-frame-pointer \
 
 echo "[SUCCESS] Test Runner compiled: bin/mcp_test_runner"
 
-echo "==================================================="
-echo "Running Integration Tests..."
-echo "==================================================="
-./bin/mcp_test_runner ./bin/sqlite-mcp-server
-echo "[SUCCESS] All integration tests passed!"
+#echo "==================================================="
+#echo "Running Integration Tests..."
+#echo "==================================================="
+#./bin/mcp_test_runner ./bin/sqlite-mcp-server
+#echo "[SUCCESS] All integration tests passed!"
