@@ -47,6 +47,7 @@ jobs:
           cmake -DCMAKE_BUILD_TYPE=Release ..
           cmake --build . --config Release
           .\Release\mcp_test_runner.exe .\Release\sqlite-mcp-server.exe
+      - name: Run Integration Tests on Chinook Database (CMake Release)
 
       - name: Build with CMake (Debug - Build Only)
         run: |
