@@ -81,18 +81,27 @@ jobs:
 
       - name: Configure PostgreSQL
         run: |
-          $pgBin  = (Get-Item "C:\Program Files\PostgreSQL\*\bin"  | Sort-Object Name -Descending | Select-Object -First 1).FullName
-          $pgData = (Get-Item "C:\Program Files\PostgreSQL\*\data" | Sort-Object Name -Descending | Select-Object -First 1).FullName
-          Write-Host "pg bin:  $pgBin"
+          $pgBin = (Get-Item "C:\Program Files\PostgreSQL\*\bin" | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          Write-Host "pg bin: $pgBin"
+          # Find data dir from the Windows service registry entry
+          $svc = Get-WmiObject Win32_Service | Where-Object { $_.Name -like 'postgresql*' } | Select-Object -First 1
+          if ($svc) {
+            # PathName is like: "...\postgres.exe" -D "C:\...\data" ...
+            if ($svc.PathName -match '-D\s+"([^"]+)"') { $pgData = $Matches[1] }
+            elseif ($svc.PathName -match "-D\s+(\S+)")  { $pgData = $Matches[1] }
+          }
+          if (-not $pgData -or -not (Test-Path $pgData)) {
+            $pgData = @("C:\Program Files\PostgreSQL\17\data","C:\Program Files\PostgreSQL\16\data","C:\Program Files\PostgreSQL\15\data") | Where-Object { Test-Path $_ } | Select-Object -First 1
+          }
           Write-Host "pg data: $pgData"
-          # Allow passwordless local connections for setup
           $hba = "$pgData\pg_hba.conf"
-          (Get-Content $hba) -replace '^(host\s+all\s+all\s+.*)(scram-sha-256|md5)', '$1trust' | Set-Content $hba
+          # Temporarily allow trust auth so we can set the password without knowing the current one
+          (Get-Content $hba) -replace '(host\s+all\s+all\s+\S+\s+)(scram-sha-256|md5)', '$1trust' | Set-Content $hba
           & "$pgBin\pg_ctl.exe" start -D "$pgData" -w -t 30
           & "$pgBin\psql.exe" -U postgres -c "ALTER USER postgres PASSWORD 'postgres';"
           & "$pgBin\psql.exe" -U postgres -c "CREATE DATABASE testdb;"
-          # Restore scram-sha-256 and reload
-          (Get-Content $hba) -replace '^(host\s+all\s+all\s+.*)trust', '$1scram-sha-256' | Set-Content $hba
+          # Restore scram-sha-256 and reload so the MCP server authenticates normally
+          (Get-Content $hba) -replace '(host\s+all\s+all\s+\S+\s+)trust', '$1scram-sha-256' | Set-Content $hba
           & "$pgBin\pg_ctl.exe" reload -D "$pgData"
         shell: pwsh
 
