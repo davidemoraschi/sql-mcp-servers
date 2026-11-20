@@ -20,10 +20,22 @@ if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Snowflake server compilation failed.
     exit /b 1
 )
+echo [INFO] Compiling PostgreSQL MCP Server...
+cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude src\main_postgres.c src\mcp_loop.c src\json_rpc.c src\rdbms_tools.c src\db_postgres.c src\pg_md5.c src\pg_scram.c src\sf_buf.c /link /LTCG /OPT:REF /OPT:ICF ws2_32.lib /OUT:bin\postgres-mcp-server.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] PostgreSQL server compilation failed.
+    exit /b 1
+)
 echo [INFO] Compiling Test Runner...
 cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude src\test_runner.c /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\mcp_test_runner.exe
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Test runner compilation failed.
+    exit /b 1
+)
+echo [INFO] Compiling PostgreSQL Test Runner...
+cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude src\test_runner_postgres.c /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\mcp_test_runner_postgres.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] PostgreSQL test runner compilation failed.
     exit /b 1
 )
 
