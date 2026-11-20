@@ -8,6 +8,9 @@ TARGET = sqlite-mcp-server
 TEST_SRCS = src/test_runner.c
 TEST_OBJS = $(TEST_SRCS:.c=.o)
 TEST_TARGET = mcp_test_runner
+PGTEST_SRCS = src/test_runner_postgres.c
+PGTEST_OBJS = $(PGTEST_SRCS:.c=.o)
+PGTEST_TARGET = mcp_test_runner_postgres
 
 # Snowflake server: WinHTTP on Windows, libcurl elsewhere.
 SF_SRCS = src/main_snowflake.c src/mcp_loop.c src/json_rpc.c src/rdbms_tools.c src/db_snowflake.c src/sf_query.c src/sf_auth.c src/sf_buf.c src/sf_http.c src/sf_loopback.c src/sf_browser.c
@@ -25,11 +28,25 @@ endif
 
 # 'all' builds the Snowflake server only when libcurl is available;
 # 'make snowflake-mcp-server' always tries to build it.
-all: $(TARGET) $(TEST_TARGET) $(if $(SF_ENABLED),$(SF_TARGET))
+# PostgreSQL server: pure C, only needs OS sockets (ws2_32 on Windows)
+PG_SRCS = src/main_postgres.c src/mcp_loop.c src/json_rpc.c src/rdbms_tools.c src/db_postgres.c src/pg_md5.c src/pg_scram.c src/sf_buf.c
+PG_OBJS = $(PG_SRCS:.c=.o)
+PG_TARGET = postgres-mcp-server
+ifeq ($(OS),Windows_NT)
+PG_LIBS = -lws2_32
+else
+PG_LIBS =
+endif
+
+all: $(TARGET) $(TEST_TARGET) $(PGTEST_TARGET) $(PG_TARGET) $(if $(SF_ENABLED),$(SF_TARGET))
 $(TARGET): $(OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ -lm -lpthread
 $(TEST_TARGET): $(TEST_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ -lm -lpthread
+$(PGTEST_TARGET): $(PGTEST_OBJS)
+	$(CC) $(LDFLAGS) -o $@ $^ -lm -lpthread
+$(PG_TARGET): $(PG_OBJS)
+	$(CC) $(LDFLAGS) -o $@ $^ $(PG_LIBS) -lm
 $(SF_TARGET): $(SF_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ $(SF_LIBS) -lm
 src/sf_http.o: CFLAGS += $(SF_CFLAGS)
@@ -38,5 +55,5 @@ src/%.o: src/%.c
 test: all
 	./$(TEST_TARGET) ./$(TARGET)
 clean:
-	rm -f $(OBJS) $(TEST_OBJS) $(SF_OBJS) $(TARGET) $(TARGET).exe $(TEST_TARGET) $(TEST_TARGET).exe $(SF_TARGET) $(SF_TARGET).exe
+	rm -f $(OBJS) $(TEST_OBJS) $(PGTEST_OBJS) $(SF_OBJS) $(PG_OBJS) $(TARGET) $(TARGET).exe $(TEST_TARGET) $(TEST_TARGET).exe $(PGTEST_TARGET) $(PGTEST_TARGET).exe $(SF_TARGET) $(SF_TARGET).exe $(PG_TARGET) $(PG_TARGET).exe
 .PHONY: all test clean

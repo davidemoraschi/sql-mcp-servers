@@ -14,10 +14,16 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
-      - name: Install libcurl (required by snowflake-mcp-server)
+      - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libcurl4-openssl-dev pkg-config
+          sudo apt-get install -y libcurl4-openssl-dev pkg-config postgresql
+
+      - name: Configure PostgreSQL
+        run: |
+          sudo systemctl start postgresql
+          sudo -u postgres psql -c "ALTER USER postgres PASSWORD 'postgres';"
+          sudo -u postgres psql -c "CREATE DATABASE testdb;"
 
       - name: Build with Shell Script
         run: |
@@ -28,11 +34,19 @@ jobs:
         run: |
           curl -sSL -o Chinook_Sqlite.sqlite https://github.com/lerocha/chinook-database/releases/download/v1.4.5/Chinook_Sqlite.sqlite
 
-      - name: Run Integration Tests on Chinook Database (Shell Build)
+      - name: Run SQLite Integration Tests (Shell Build)
         env:
           SQLITE_DB_PATH: ${{ github.workspace }}/Chinook_Sqlite.sqlite
-        run: |
-          ./bin/mcp_test_runner ./bin/sqlite-mcp-server
+        run: ./bin/mcp_test_runner ./bin/sqlite-mcp-server
+
+      - name: Run PostgreSQL Integration Tests (Shell Build)
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGDATABASE: testdb
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: ./bin/mcp_test_runner_postgres ./bin/postgres-mcp-server
 
       - name: Build with CMake (Release)
         run: |
@@ -41,11 +55,19 @@ jobs:
           cmake -DCMAKE_BUILD_TYPE=Release ..
           cmake --build .
 
-      - name: Run Integration Tests on Chinook Database (CMake Build)
+      - name: Run SQLite Integration Tests (CMake Build)
         env:
           SQLITE_DB_PATH: ${{ github.workspace }}/Chinook_Sqlite.sqlite
-        run: |
-          ./build-cmake/mcp_test_runner ./build-cmake/sqlite-mcp-server
+        run: ./build-cmake/mcp_test_runner ./build-cmake/sqlite-mcp-server
+
+      - name: Run PostgreSQL Integration Tests (CMake Build)
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGDATABASE: testdb
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: ./build-cmake/mcp_test_runner_postgres ./build-cmake/postgres-mcp-server
 
   build-windows:
     name: Build & Test Windows (64-bit MSVC)
@@ -57,6 +79,16 @@ jobs:
       - name: Set up MSVC Developer Command Prompt
         uses: ilammy/msvc-dev-cmd@v1
 
+      - name: Install and configure PostgreSQL
+        run: |
+          choco install postgresql --params "/Password:postgres" -y
+          $env:PATH += ";C:\Program Files\PostgreSQL\17\bin"
+          Start-Sleep -Seconds 5
+          & "C:\Program Files\PostgreSQL\17\bin\psql.exe" -U postgres -c "CREATE DATABASE testdb;"
+        shell: pwsh
+        env:
+          PGPASSWORD: postgres
+
       - name: Build with Batch Script (Release)
         run: ./build.bat
 
@@ -64,10 +96,19 @@ jobs:
         run: |
           curl.exe -sSL -o Chinook_Sqlite.sqlite https://github.com/lerocha/chinook-database/releases/download/v1.4.5/Chinook_Sqlite.sqlite
 
-      - name: Run Integration Tests on Chinook Database (Batch Build)
+      - name: Run SQLite Integration Tests (Batch Build)
         env:
           SQLITE_DB_PATH: ${{ github.workspace }}/Chinook_Sqlite.sqlite
         run: bin\mcp_test_runner.exe bin\sqlite-mcp-server.exe
+
+      - name: Run PostgreSQL Integration Tests (Batch Build)
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGDATABASE: testdb
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bin\mcp_test_runner_postgres.exe bin\postgres-mcp-server.exe
 
       - name: Build with CMake (Release)
         run: |
@@ -76,11 +117,19 @@ jobs:
           cmake ..
           cmake --build . --config Release
 
-      - name: Run Integration Tests on Chinook Database (CMake Release)
+      - name: Run SQLite Integration Tests (CMake Release)
         env:
           SQLITE_DB_PATH: ${{ github.workspace }}/Chinook_Sqlite.sqlite
-        run: |
-          .\build-cmake\Release\mcp_test_runner.exe .\build-cmake\Release\sqlite-mcp-server.exe
+        run: .\build-cmake\Release\mcp_test_runner.exe .\build-cmake\Release\sqlite-mcp-server.exe
+
+      - name: Run PostgreSQL Integration Tests (CMake Release)
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGDATABASE: testdb
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: .\build-cmake\Release\mcp_test_runner_postgres.exe .\build-cmake\Release\postgres-mcp-server.exe
 
       - name: Build with CMake (Debug - Build Only)
         run: |

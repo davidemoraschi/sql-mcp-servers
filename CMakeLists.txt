@@ -19,8 +19,9 @@ set(SERVER_SOURCES
 
 add_executable(sqlite-mcp-server ${SERVER_SOURCES})
 add_executable(mcp_test_runner src/test_runner.c)
+add_executable(mcp_test_runner_postgres src/test_runner_postgres.c)
 
-set(MCP_TARGETS sqlite-mcp-server mcp_test_runner)
+set(MCP_TARGETS sqlite-mcp-server mcp_test_runner mcp_test_runner_postgres)
 
 # Snowflake MCP server. Needs WinHTTP on Windows (part of the OS) and libcurl
 # on other platforms; without libcurl the target is skipped so the SQLite
@@ -55,6 +56,22 @@ if(BUILD_SNOWFLAKE)
     endif()
     list(APPEND MCP_TARGETS snowflake-mcp-server)
 endif()
+
+# PostgreSQL MCP server — pure C, no external deps beyond OS sockets
+add_executable(postgres-mcp-server
+    src/main_postgres.c
+    src/mcp_loop.c
+    src/json_rpc.c
+    src/rdbms_tools.c
+    src/db_postgres.c
+    src/pg_md5.c
+    src/pg_scram.c
+    src/sf_buf.c
+)
+if(WIN32)
+    target_link_libraries(postgres-mcp-server PRIVATE ws2_32)
+endif()
+list(APPEND MCP_TARGETS postgres-mcp-server)
 
 foreach(tgt IN LISTS MCP_TARGETS)
     if(MSVC)

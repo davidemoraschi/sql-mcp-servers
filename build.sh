@@ -28,6 +28,17 @@ $CC -std=c11 -O2  -fomit-frame-pointer \
     -o bin/sqlite-mcp-server -lm -lpthread
 
 echo "[SUCCESS] Server compiled: bin/sqlite-mcp-server"
+
+echo "[INFO] Compiling PostgreSQL MCP Server..."
+$CC -std=c11 -O2 -fomit-frame-pointer \
+    -ffunction-sections -fdata-sections \
+    -DNDEBUG -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE \
+    -Iinclude \
+    src/main_postgres.c src/mcp_loop.c src/json_rpc.c src/rdbms_tools.c src/db_postgres.c src/pg_md5.c src/pg_scram.c src/sf_buf.c \
+    -Wl,--gc-sections -Wl,-s \
+    -o bin/postgres-mcp-server -lm
+echo "[SUCCESS] Server compiled: bin/postgres-mcp-server"
+
 if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists libcurl; then
     echo "[INFO] Compiling Snowflake MCP Server (libcurl found)..."
     $CC -std=c11 -O2  -fomit-frame-pointer \
@@ -44,15 +55,24 @@ else
 fi
 
 echo "[INFO] Compiling Test Runner..."
-$CC -std=c11 -O2  -fomit-frame-pointer \
+$CC -std=c11 -O2 -fomit-frame-pointer \
     -ffunction-sections -fdata-sections \
     -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE \
     -Iinclude \
     src/test_runner.c \
     -Wl,--gc-sections -Wl,-s \
     -o bin/mcp_test_runner -lm -lpthread
-
 echo "[SUCCESS] Test Runner compiled: bin/mcp_test_runner"
+
+echo "[INFO] Compiling PostgreSQL Test Runner..."
+$CC -std=c11 -O2 -fomit-frame-pointer \
+    -ffunction-sections -fdata-sections \
+    -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE \
+    -Iinclude \
+    src/test_runner_postgres.c \
+    -Wl,--gc-sections -Wl,-s \
+    -o bin/mcp_test_runner_postgres -lm -lpthread
+echo "[SUCCESS] PostgreSQL Test Runner compiled: bin/mcp_test_runner_postgres"
 
 #echo "==================================================="
 #echo "Running Integration Tests..."
