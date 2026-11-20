@@ -46,7 +46,7 @@ if %ERRORLEVEL% NEQ 0 goto NO_TOOLS
 echo [INFO] cl.exe not in PATH, attempting CMake build...
 if not exist build mkdir build
 cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake ..
 if %ERRORLEVEL% NEQ 0 (
     cd ..
     echo [ERROR] CMake configuration failed.
