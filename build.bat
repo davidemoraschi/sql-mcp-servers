@@ -8,12 +8,18 @@ if %ERRORLEVEL% NEQ 0 goto TRY_CMAKE
 
 echo [INFO] Found MSVC compiler (cl.exe). Compiling Release binary...
 if not exist bin mkdir bin
-cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /DNDEBUG /DSQLITE_THREADSAFE=0 /DSQLITE_OMIT_LOAD_EXTENSION /DHAS_EMBEDDED_SQLITE /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude src\main.c src\json_rpc.c src\rdbms_tools.c src\db_sqlite.c src\sqlite3.c /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\sqlite-mcp-server.exe
+cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /DNDEBUG /DSQLITE_THREADSAFE=0 /DSQLITE_OMIT_LOAD_EXTENSION /DHAS_EMBEDDED_SQLITE /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude src\main.c src\mcp_loop.c src\json_rpc.c src\rdbms_tools.c src\db_sqlite.c src\sqlite3.c /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\sqlite-mcp-server.exe
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Server compilation failed.
     exit /b 1
 )
 
+echo [INFO] Compiling Snowflake MCP Server...
+cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude src\main_snowflake.c src\mcp_loop.c src\json_rpc.c src\rdbms_tools.c src\db_snowflake.c src\sf_query.c src\sf_auth.c src\sf_buf.c src\sf_http.c src\sf_loopback.c src\sf_browser.c /link /LTCG /OPT:REF /OPT:ICF winhttp.lib ws2_32.lib shell32.lib /OUT:bin\snowflake-mcp-server.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] Snowflake server compilation failed.
+    exit /b 1
+)
 echo [INFO] Compiling Test Runner...
 cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude src\test_runner.c /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\mcp_test_runner.exe
 if %ERRORLEVEL% NEQ 0 (
@@ -40,7 +46,7 @@ if %ERRORLEVEL% NEQ 0 goto NO_TOOLS
 echo [INFO] cl.exe not in PATH, attempting CMake build...
 if not exist build mkdir build
 cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
+cmake ..
 if %ERRORLEVEL% NEQ 0 (
     cd ..
     echo [ERROR] CMake configuration failed.

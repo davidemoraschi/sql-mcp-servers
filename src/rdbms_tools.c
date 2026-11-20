@@ -10,32 +10,51 @@
 #include "rdbms_tools.h"
 #include "db_sqlite.h"
 
+static McpProfile g_profile = {
+    "sqlite-mcp-server",
+    "SQLite",
+    "Check database integrity, foreign key consistency, and size",
+    true
+};
+
+void tools_set_profile(const McpProfile *profile) {
+    if (profile) g_profile = *profile;
+}
+
 void tools_handle_initialize(const char *id) {
-    const char *init_json = 
-        "{\"protocolVersion\":\"2025-11-25\",\"serverInfo\":{\"name\":\"sqlite-mcp-server\",\"version\":\"1.0.0\"},\"capabilities\":{\"tools\":{\"listChanged\":false}}}";
-    json_rpc_send_result(id, init_json);
+    char buf[512];
+    snprintf(buf, sizeof(buf),
+        "{\"protocolVersion\":\"2025-11-25\",\"serverInfo\":{\"name\":\"%s\",\"version\":\"1.0.0\"},\"capabilities\":{\"tools\":{\"listChanged\":false}}}",
+        g_profile.server_name);
+    json_rpc_send_result(id, buf);
 }
 
 void tools_handle_discover(const char *id) {
-    const char *discover_json = 
-        "{\"protocolVersion\":\"2026-07-28\",\"serverInfo\":{\"name\":\"sqlite-mcp-server\",\"version\":\"1.0.0\"},\"capabilities\":{\"tools\":{\"listChanged\":false}}}";
-    json_rpc_send_result(id, discover_json);
+    char buf[512];
+    snprintf(buf, sizeof(buf),
+        "{\"protocolVersion\":\"2026-07-28\",\"serverInfo\":{\"name\":\"%s\",\"version\":\"1.0.0\"},\"capabilities\":{\"tools\":{\"listChanged\":false}}}",
+        g_profile.server_name);
+    json_rpc_send_result(id, buf);
 }
 
 void tools_handle_list(const char *id) {
-    const char *list_json = 
+    static const char backup_tool[] =
+        "{\"name\":\"backup_database\",\"description\":\"Create an online point-in-time backup of the database\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"target_path\":{\"type\":\"string\",\"description\":\"Destination file path for backup\"}},\"required\":[\"target_path\"]},\"annotations\":{\"readOnlyHint\":true}},";
+    char list_json[8192];
+    snprintf(list_json, sizeof(list_json),
         "{\"ttlMs\":300000,\"cacheScope\":\"public\",\"tools\":["
-        "{\"name\":\"read_query\",\"description\":\"Execute read-only SQL SELECT queries against the SQLite database\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL SELECT statement to execute\"}},\"required\":[\"sql\"]},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"read_query\",\"description\":\"Execute read-only SQL SELECT queries against the %s database\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL SELECT statement to execute\"}},\"required\":[\"sql\"]},\"annotations\":{\"readOnlyHint\":true}},"
         "{\"name\":\"write_query\",\"description\":\"Execute SQL modification queries (INSERT/UPDATE/DELETE/CREATE)\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL modification query to execute\"}},\"required\":[\"sql\"]},\"annotations\":{\"idempotentHint\":false}},"
-        "{\"name\":\"backup_database\",\"description\":\"Create an online point-in-time backup of the database\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"target_path\":{\"type\":\"string\",\"description\":\"Destination file path for backup\"}},\"required\":[\"target_path\"]},\"annotations\":{\"readOnlyHint\":true}},"
+        "%s"
         "{\"name\":\"explain_query\",\"description\":\"Inspect the query execution plan for a SQL query\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"sql\":{\"type\":\"string\",\"description\":\"SQL statement to evaluate\"}},\"required\":[\"sql\"]},\"annotations\":{\"readOnlyHint\":true}},"
         "{\"name\":\"describe_table\",\"description\":\"Describe table schema, columns, data types, nullability, and primary keys\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"table_name\":{\"type\":\"string\",\"description\":\"Target relational table name\"}},\"required\":[\"table_name\"]},\"annotations\":{\"readOnlyHint\":true}},"
         "{\"name\":\"infer_relationships\",\"description\":\"Infer primary and foreign key relationships across database tables\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}},"
         "{\"name\":\"generate_erd\",\"description\":\"Generate PlantUML ERD schema diagram of the database\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}},"
         "{\"name\":\"list_tables\",\"description\":\"List all database tables, views, and row counts\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}},"
         "{\"name\":\"export_data\",\"description\":\"Export database table contents to CSV or JSON format\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"table_name\":{\"type\":\"string\",\"description\":\"Table name to export\"},\"format\":{\"type\":\"string\",\"enum\":[\"csv\",\"json\"],\"description\":\"Export format\"}},\"required\":[\"table_name\",\"format\"]},\"annotations\":{\"readOnlyHint\":true}},"
-        "{\"name\":\"check_database_health\",\"description\":\"Check database integrity, foreign key consistency, and size\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}}"
-        "]}";
+        "{\"name\":\"check_database_health\",\"description\":\"%s\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}}"
+        "]}",
+        g_profile.db_label, g_profile.has_backup ? backup_tool : "", g_profile.health_desc);
     json_rpc_send_result(id, list_json);
 }
 
@@ -144,7 +163,7 @@ void tools_handle_call(const char *id, const JsonValue *params) {
         JsonValue *v_sql = v_args ? json_object_get(v_args, "sql") : NULL;
         const char *sql = json_string_value(v_sql);
         res = db_execute_write(sql ? sql : "UPDATE dummy SET id=1;", NULL);
-    } else if (strcmp(tool_name, "backup_database") == 0) {
+    } else if (strcmp(tool_name, "backup_database") == 0 && g_profile.has_backup) {
         JsonValue *v_path = v_args ? json_object_get(v_args, "target_path") : NULL;
         res = db_backup(json_string_value(v_path));
     } else if (strcmp(tool_name, "explain_query") == 0) {

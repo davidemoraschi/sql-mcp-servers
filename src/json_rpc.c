@@ -22,6 +22,42 @@ static const char *skip_whitespace(const char *p) {
     return p;
 }
 
+/* Parse 4 hex digits; returns false if any is not a hex digit. */
+static bool parse_hex4(const char *p, unsigned *out) {
+    unsigned v = 0;
+    for (int i = 0; i < 4; i++) {
+        char c = p[i];
+        v <<= 4;
+        if (c >= '0' && c <= '9') v |= (unsigned)(c - '0');
+        else if (c >= 'a' && c <= 'f') v |= (unsigned)(c - 'a' + 10);
+        else if (c >= 'A' && c <= 'F') v |= (unsigned)(c - 'A' + 10);
+        else return false;
+    }
+    *out = v;
+    return true;
+}
+
+/* Encode a code point as UTF-8; returns the number of bytes written (<= 4). */
+static size_t utf8_encode(unsigned cp, char *out) {
+    if (cp < 0x80) { out[0] = (char)cp; return 1; }
+    if (cp < 0x800) {
+        out[0] = (char)(0xC0 | (cp >> 6));
+        out[1] = (char)(0x80 | (cp & 0x3F));
+        return 2;
+    }
+    if (cp < 0x10000) {
+        out[0] = (char)(0xE0 | (cp >> 12));
+        out[1] = (char)(0x80 | ((cp >> 6) & 0x3F));
+        out[2] = (char)(0x80 | (cp & 0x3F));
+        return 3;
+    }
+    out[0] = (char)(0xF0 | (cp >> 18));
+    out[1] = (char)(0x80 | ((cp >> 12) & 0x3F));
+    out[2] = (char)(0x80 | ((cp >> 6) & 0x3F));
+    out[3] = (char)(0x80 | (cp & 0x3F));
+    return 4;
+}
+
 static char *parse_string_token(const char **src) {
     const char *p = *src;
     if (*p != '"') return NULL;
@@ -46,6 +82,25 @@ static char *parse_string_token(const char **src) {
             if (*p == 'n') out[idx++] = '\n';
             else if (*p == 'r') out[idx++] = '\r';
             else if (*p == 't') out[idx++] = '\t';
+            else if (*p == 'b') out[idx++] = '\b';
+            else if (*p == 'f') out[idx++] = '\f';
+            else if (*p == 'u') {
+                unsigned cp;
+                if (parse_hex4(p + 1, &cp)) {
+                    p += 4;
+                    if (cp >= 0xD800 && cp <= 0xDBFF && p[1] == '\\' && p[2] == 'u') {
+                        unsigned lo;
+                        if (parse_hex4(p + 3, &lo) && lo >= 0xDC00 && lo <= 0xDFFF) {
+                            cp = 0x10000 + ((cp - 0xD800) << 10) + (lo - 0xDC00);
+                            p += 6;
+                        }
+                    }
+                    if (cp >= 0xD800 && cp <= 0xDFFF) cp = 0xFFFD; /* lone surrogate */
+                    if (cp != 0) idx += utf8_encode(cp, out + idx);
+                } else {
+                    out[idx++] = *p;
+                }
+            }
             else out[idx++] = *p;
         } else {
             out[idx++] = *p;

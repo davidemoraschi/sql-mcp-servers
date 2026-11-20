@@ -14,6 +14,11 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
+      - name: Install libcurl (required by snowflake-mcp-server)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libcurl4-openssl-dev pkg-config
+
       - name: Build with Shell Script
         run: |
           chmod +x build.sh
@@ -68,7 +73,7 @@ jobs:
         run: |
           mkdir build-cmake
           cd build-cmake
-          cmake -DCMAKE_BUILD_TYPE=Release ..
+          cmake ..
           cmake --build . --config Release
 
       - name: Run Integration Tests on Chinook Database (CMake Release)
@@ -81,5 +86,5 @@ jobs:
         run: |
           mkdir build-cmake-debug
           cd build-cmake-debug
-          cmake -DCMAKE_BUILD_TYPE=Debug ..
+          cmake ..
           cmake --build . --config Debug

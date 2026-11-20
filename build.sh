@@ -23,11 +23,25 @@ $CC -std=c11 -O2  -fomit-frame-pointer \
     -DNDEBUG -DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_LOAD_EXTENSION -DHAS_EMBEDDED_SQLITE \
     -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE \
     -Iinclude \
-    src/main.c src/json_rpc.c src/rdbms_tools.c src/db_sqlite.c src/sqlite3.c \
+    src/main.c src/mcp_loop.c src/json_rpc.c src/rdbms_tools.c src/db_sqlite.c src/sqlite3.c \
     -Wl,--gc-sections -Wl,-s \
     -o bin/sqlite-mcp-server -lm -lpthread
 
 echo "[SUCCESS] Server compiled: bin/sqlite-mcp-server"
+if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists libcurl; then
+    echo "[INFO] Compiling Snowflake MCP Server (libcurl found)..."
+    $CC -std=c11 -O2  -fomit-frame-pointer \
+        -ffunction-sections -fdata-sections \
+        -DNDEBUG -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE \
+        -Iinclude $(pkg-config --cflags libcurl) \
+        src/main_snowflake.c src/mcp_loop.c src/json_rpc.c src/rdbms_tools.c src/db_snowflake.c \
+        src/sf_query.c src/sf_auth.c src/sf_buf.c src/sf_http.c src/sf_loopback.c src/sf_browser.c \
+        -Wl,--gc-sections -Wl,-s \
+        -o bin/snowflake-mcp-server $(pkg-config --libs libcurl) -lm
+    echo "[SUCCESS] Server compiled: bin/snowflake-mcp-server"
+else
+    echo "[WARN] libcurl development files not found: skipping snowflake-mcp-server (install libcurl4-openssl-dev)."
+fi
 
 echo "[INFO] Compiling Test Runner..."
 $CC -std=c11 -O2  -fomit-frame-pointer \
