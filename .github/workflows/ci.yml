@@ -79,12 +79,12 @@ jobs:
       - name: Set up MSVC Developer Command Prompt
         uses: ilammy/msvc-dev-cmd@v1
 
-      - name: Install and configure PostgreSQL
+      - name: Configure PostgreSQL
         run: |
-          choco install postgresql --params "/Password:postgres" -y
-          $env:PATH += ";C:\Program Files\PostgreSQL\17\bin"
-          Start-Sleep -Seconds 5
-          & "C:\Program Files\PostgreSQL\17\bin\psql.exe" -U postgres -c "CREATE DATABASE testdb;"
+          $pgBin = (Get-Item "C:\Program Files\PostgreSQL\*\bin" | Sort-Object -Descending | Select-Object -First 1).FullName
+          Write-Host "Using PostgreSQL at $pgBin"
+          & "$pgBin\psql.exe" -U postgres -c "ALTER USER postgres PASSWORD 'postgres';"
+          & "$pgBin\psql.exe" -U postgres -c "CREATE DATABASE testdb;"
         shell: pwsh
         env:
           PGPASSWORD: postgres
