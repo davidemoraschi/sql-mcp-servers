@@ -77,3 +77,39 @@ make
 
 ## License
 MIT License
+
+---
+
+## Snowflake MCP Server (`snowflake-mcp-server`)
+
+Same MCP loop and tool layer as the SQLite server, with a Snowflake backend. Authentication is Snowflake external-browser SSO (the sign-in runs on the first tool call, so `initialize` and `tools/list` answer immediately). The SSO URL is also printed to stderr.
+
+Unlike the SQLite server it is **not dependency free**: Windows uses WinHTTP (part of the OS), Linux needs libcurl (`libcurl4-openssl-dev`). If libcurl is missing, `build.sh` and CMake skip this target and still build the SQLite server.
+
+| Variable | Default | Description |
+|---|---|---|
+| `SNOWFLAKE_ACCOUNT` | required | `ORG-ACCOUNT` or `locator[.region]`. |
+| `SNOWFLAKE_USER` | required | Snowflake login name (the SSO user). |
+| `SNOWFLAKE_ROLE`, `SNOWFLAKE_WAREHOUSE`, `SNOWFLAKE_DATABASE`, `SNOWFLAKE_SCHEMA` | none | Applied with `USE ...` after sign-in. Unquoted names only. |
+| `SNOWFLAKE_ACCESS_MODE` | `READWRITE` | `READONLY` disables `write_query`. Use a read-only Snowflake role for real protection. |
+| `SNOWFLAKE_CALLBACK_PORT` | `0` | Fixed loopback port for the SSO redirect (0 = OS-chosen). |
+| `SNOWFLAKE_SSO_TIMEOUT_SECONDS` | `120` | How long to wait for the browser sign-in. |
+| `SNOWFLAKE_QUERY_TIMEOUT_SECONDS` | `300` | How long to wait for a long-running query. |
+
+Differences from the SQLite tools: `backup_database` is not offered; `check_database_health` reports the session (account, region, user, role, warehouse, database, schema, version); `read_query` accepts a single SELECT/WITH/SHOW/DESCRIBE/EXPLAIN/LIST/VALUES statement; results are capped at 1000 rows and only the first result chunk is fetched.
+
+```json
+{
+  "mcpServers": {
+    "snowflake": {
+      "command": "/path/to/snowflake-mcp-server",
+      "env": {
+        "SNOWFLAKE_ACCOUNT": "MYORG-MYACCOUNT",
+        "SNOWFLAKE_USER": "me@example.com",
+        "SNOWFLAKE_WAREHOUSE": "COMPUTE_WH",
+        "SNOWFLAKE_ACCESS_MODE": "READONLY"
+      }
+    }
+  }
+}
+```
