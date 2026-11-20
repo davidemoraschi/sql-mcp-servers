@@ -81,13 +81,20 @@ jobs:
 
       - name: Configure PostgreSQL
         run: |
-          $pgBin = (Get-Item "C:\Program Files\PostgreSQL\*\bin" | Sort-Object -Descending | Select-Object -First 1).FullName
-          Write-Host "Using PostgreSQL at $pgBin"
+          $pgBin  = (Get-Item "C:\Program Files\PostgreSQL\*\bin"  | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          $pgData = (Get-Item "C:\Program Files\PostgreSQL\*\data" | Sort-Object Name -Descending | Select-Object -First 1).FullName
+          Write-Host "pg bin:  $pgBin"
+          Write-Host "pg data: $pgData"
+          # Allow passwordless local connections for setup
+          $hba = "$pgData\pg_hba.conf"
+          (Get-Content $hba) -replace '^(host\s+all\s+all\s+.*)(scram-sha-256|md5)', '$1trust' | Set-Content $hba
+          & "$pgBin\pg_ctl.exe" start -D "$pgData" -w -t 30
           & "$pgBin\psql.exe" -U postgres -c "ALTER USER postgres PASSWORD 'postgres';"
           & "$pgBin\psql.exe" -U postgres -c "CREATE DATABASE testdb;"
+          # Restore scram-sha-256 and reload
+          (Get-Content $hba) -replace '^(host\s+all\s+all\s+.*)trust', '$1scram-sha-256' | Set-Content $hba
+          & "$pgBin\pg_ctl.exe" reload -D "$pgData"
         shell: pwsh
-        env:
-          PGPASSWORD: postgres
 
       - name: Build with Batch Script (Release)
         run: ./build.bat
