@@ -32,7 +32,7 @@ echo "[SUCCESS] Server compiled: bin/sqlite-mcp-server"
 echo "[INFO] Compiling PostgreSQL MCP Server..."
 $CC -std=c11 -O2 -fomit-frame-pointer \
     -ffunction-sections -fdata-sections \
-    -DNDEBUG -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE \
+    -DNDEBUG -D_POSIX_C_SOURCE=200112L -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE \
     -Iinclude \
     src/main_postgres.c src/mcp_loop.c src/json_rpc.c src/rdbms_tools.c src/db_postgres.c src/pg_md5.c src/pg_scram.c src/sf_buf.c \
     -Wl,--gc-sections -Wl,-s \

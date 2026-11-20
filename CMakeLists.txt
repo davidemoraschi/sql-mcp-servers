@@ -70,6 +70,8 @@ add_executable(postgres-mcp-server
 )
 if(WIN32)
     target_link_libraries(postgres-mcp-server PRIVATE ws2_32)
+else()
+    target_compile_definitions(postgres-mcp-server PRIVATE _POSIX_C_SOURCE=200112L)
 endif()
 list(APPEND MCP_TARGETS postgres-mcp-server)
 

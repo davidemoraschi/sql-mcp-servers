@@ -34,8 +34,10 @@ PG_OBJS = $(PG_SRCS:.c=.o)
 PG_TARGET = postgres-mcp-server
 ifeq ($(OS),Windows_NT)
 PG_LIBS = -lws2_32
+PG_CFLAGS =
 else
 PG_LIBS =
+PG_CFLAGS = -D_POSIX_C_SOURCE=200112L
 endif
 
 all: $(TARGET) $(TEST_TARGET) $(PGTEST_TARGET) $(PG_TARGET) $(if $(SF_ENABLED),$(SF_TARGET))
@@ -50,6 +52,7 @@ $(PG_TARGET): $(PG_OBJS)
 $(SF_TARGET): $(SF_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ $(SF_LIBS) -lm
 src/sf_http.o: CFLAGS += $(SF_CFLAGS)
+$(PG_OBJS): CFLAGS += $(PG_CFLAGS)
 src/%.o: src/%.c
 	$(CC) $(CFLAGS) -c $< -o $@
 test: all
