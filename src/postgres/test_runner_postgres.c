@@ -223,6 +223,36 @@ int main(int argc, char **argv) {
         send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":18,\"method\":\"unknown_method\"}"),
         strstr(resp, "\"id\":18") && strstr(resp, "error"));
 
+    /* TC-19: Create transfer_test table */
+    RUN(19, "Create transfer_test table",
+        send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":19,\"method\":\"tools/call\",\"params\":{\"name\":\"write_query\",\"arguments\":{\"sql\":\"CREATE TABLE IF NOT EXISTS transfer_test (id SERIAL PRIMARY KEY, val TEXT, num NUMERIC)\"}}}" ),
+        verify_dual_channel(resp, 19));
+
+    /* TC-20: Populate with 1000 rows */
+    RUN(20, "Populate transfer_test with 1000 rows",
+        send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":20,\"method\":\"tools/call\",\"params\":{\"name\":\"write_query\",\"arguments\":{\"sql\":\"INSERT INTO transfer_test (val, num) SELECT md5(i::text), round((i * 3.14159)::numeric, 4) FROM generate_series(1,1000) AS i\"}}}" ),
+        verify_dual_channel(resp, 20));
+
+    /* TC-21: Export to CSV */
+    RUN(21, "Export transfer_test to CSV",
+        send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":21,\"method\":\"tools/call\",\"params\":{\"name\":\"export_data\",\"arguments\":{\"target\":\"transfer_test\",\"destination_path\":\"transfer_test_export.csv\",\"format\":\"csv\"}}}" ),
+        verify_dual_channel(resp, 21) && strstr(resp, "success"));
+
+    /* TC-22: Import CSV into transfer_test_imported */
+    RUN(22, "Import CSV into transfer_test_imported",
+        send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":22,\"method\":\"tools/call\",\"params\":{\"name\":\"import_data\",\"arguments\":{\"source_path\":\"transfer_test_export.csv\",\"destination_table\":\"transfer_test_imported\",\"format\":\"csv\",\"auto_create_table\":true,\"optimize_speed\":true}}}" ),
+        verify_dual_channel(resp, 22) && strstr(resp, "success"));
+
+    /* TC-23: Verify row count parity */
+    RUN(23, "Verify row count parity (1000 rows in both tables)",
+        send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":23,\"method\":\"tools/call\",\"params\":{\"name\":\"read_query\",\"arguments\":{\"sql\":\"SELECT (SELECT COUNT(*) FROM transfer_test) AS src, (SELECT COUNT(*) FROM transfer_test_imported) AS dst\"}}}" ),
+        verify_dual_channel(resp, 23) && strstr(resp, "\"src\":\"1000\"") && strstr(resp, "\"dst\":\"1000\""));
+
+    /* TC-24: Cleanup */
+    RUN(24, "Cleanup transfer test tables",
+        send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":24,\"method\":\"tools/call\",\"params\":{\"name\":\"write_query\",\"arguments\":{\"sql\":\"DROP TABLE IF EXISTS transfer_test; DROP TABLE IF EXISTS transfer_test_imported\"}}}" ),
+        verify_dual_channel(resp, 24));
+
     close_server(&proc);
 
     printf("\n===================================================\n");
