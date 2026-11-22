@@ -151,7 +151,12 @@ static pg_sock_t pg_connect_unix(const char *dir,const char *port,int tmo,char *
 /* Startup + authentication                                             */
 /* ------------------------------------------------------------------ */
 static bool pg_error_msg(const uint8_t *msg,uint32_t mlen,char *err,size_t esz) {
-    for (uint32_t i=0;i+1<mlen;) { if (msg[i]=='M') { snprintf(err,esz,"%s",(const char*)(msg+i+1)); return true; } size_t fl=strlen((const char*)(msg+i)); i+=(uint32_t)fl+1; if (i>=mlen||msg[i]=='\0') break; i++; }
+    for (uint32_t i=0;i+1<mlen;) {
+        if (msg[i]=='M') { snprintf(err,esz,"%s",(const char*)(msg+i+1)); return true; }
+        size_t fl=strlen((const char*)(msg+i)); i+=(uint32_t)fl+1;
+        if (i>=mlen||msg[i]=='\0') break;
+        i++;
+    }
     snprintf(err,esz,"Unknown error"); return false;
 }
 
@@ -305,10 +310,15 @@ PgResult pg_exec(const char *sql) {
             r.rows[r.row_count++]=row;
         } else if (type=='E') {
             char emsg[512]="Query error";
-            for (uint32_t i=0;i+1<mlen;) { if (msg[i]=='M') { snprintf(emsg,sizeof(emsg),"%s",(char*)(msg+i+1)); break; } size_t fl=strlen((char*)(msg+i)); i+=(uint32_t)fl+1; if (i>=mlen||msg[i]=='\0') break; i++; }
+            for (uint32_t i=0;i+1<mlen;) {
+                if (msg[i]=='M') { snprintf(emsg,sizeof(emsg),"%s",(char*)(msg+i+1)); break; }
+                size_t fl=strlen((char*)(msg+i)); i+=(uint32_t)fl+1;
+                if (i>=mlen||msg[i]=='\0') break;
+                i++;
+            }
             free(r.error); r.error=pg_strdup(emsg); free(msg);
-        } else if (type=='Z') { free(msg); break;
-        } else { free(msg); }
+        } else if (type=='Z') { free(msg); break; }
+        else { free(msg); }
     }
     r.success = (r.error == NULL);
     return r;

@@ -84,7 +84,8 @@ DbQueryResult db_export_data(const char *target, const char *destination_path, c
     if (strcmp(fmt, "json") == 0) {
         fputs("[", f);
         for (size_t r = 0; r < rows; r++) {
-            if (r > 0) fputs(",", f); fputs("{", f);
+            if (r > 0) fputs(",", f);
+            fputs("{", f);
             for (size_t c = 0; c < cols; c++) {
                 const char *t = sf_cell_text(sf_rowset_cell(&q, r, c), num, sizeof(num), &is_null);
                 if (c > 0) fputs(",", f);
