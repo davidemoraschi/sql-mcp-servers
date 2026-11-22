@@ -8,36 +8,39 @@ if %ERRORLEVEL% NEQ 0 goto TRY_CMAKE
 
 echo [INFO] Found MSVC compiler (cl.exe). Compiling Release binary...
 if not exist bin mkdir bin
-cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /DNDEBUG /DSQLITE_THREADSAFE=0 /DSQLITE_OMIT_LOAD_EXTENSION /DHAS_EMBEDDED_SQLITE /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude src\main.c src\mcp_loop.c src\json_rpc.c src\rdbms_tools.c src\db_sqlite.c src\sqlite3.c /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\sqlite-mcp-server.exe
+
+cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /DNDEBUG /DSQLITE_THREADSAFE=0 /DSQLITE_OMIT_LOAD_EXTENSION /DHAS_EMBEDDED_SQLITE /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude ^
+    src\\sqlite\\main.c src\\shared\\mcp_loop.c src\\shared\\json_rpc.c src\\shared\\rdbms_tools.c ^
+    src\\sqlite\\db_sqlite_core.c src\\sqlite\\db_sqlite_transfer.c src\\sqlite\\sqlite3.c ^
+    /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\\sqlite-mcp-server.exe
 if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Server compilation failed.
+    echo [ERROR] SQLite server compilation failed.
     exit /b 1
 )
 
 echo [INFO] Compiling Snowflake MCP Server...
-cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude src\main_snowflake.c src\mcp_loop.c src\json_rpc.c src\rdbms_tools.c src\db_snowflake.c src\sf_query.c src\sf_auth.c src\sf_buf.c src\sf_http.c src\sf_loopback.c src\sf_browser.c /link /LTCG /OPT:REF /OPT:ICF winhttp.lib ws2_32.lib shell32.lib /OUT:bin\snowflake-mcp-server.exe
+cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude ^
+    src\\snowflake\\main_snowflake.c src\\shared\\mcp_loop.c src\\shared\\json_rpc.c src\\shared\\rdbms_tools.c ^
+    src\\snowflake\\db_snowflake_core.c src\\snowflake\\db_snowflake_transfer.c ^
+    src\\snowflake\\sf_query.c src\\snowflake\\sf_auth.c src\\snowflake\\sf_buf.c ^
+    src\\snowflake\\sf_http.c src\\snowflake\\sf_loopback.c src\\snowflake\\sf_browser.c ^
+    /link /LTCG /OPT:REF /OPT:ICF winhttp.lib ws2_32.lib shell32.lib /OUT:bin\\snowflake-mcp-server.exe
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Snowflake server compilation failed.
     exit /b 1
 )
+
 echo [INFO] Compiling Test Runner...
-cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude src\test_runner.c /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\mcp_test_runner.exe
+cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude ^
+    src\\shared\\test_runner.c ^
+    /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\\mcp_test_runner_sqlite.exe
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] Test runner compilation failed.
     exit /b 1
 )
 
-rem echo ===================================================
-rem echo Running Integration Tests...
-rem echo ===================================================
-rem bin\mcp_test_runner.exe bin\sqlite-mcp-server.exe
-if %ERRORLEVEL% EQU 0 (
-    echo [SUCCESS] Build passed!
-    exit /b 0
-) else (
-    echo [ERROR] Build failed.
-    exit /b 1
-)
+echo [SUCCESS] Build passed!
+exit /b 0
 
 :TRY_CMAKE
 where cmake >nul 2>nul
@@ -47,27 +50,14 @@ echo [INFO] cl.exe not in PATH, attempting CMake build...
 if not exist build mkdir build
 cd build
 cmake ..
-if %ERRORLEVEL% NEQ 0 (
-    cd ..
-    echo [ERROR] CMake configuration failed.
-    exit /b 1
-)
+if %ERRORLEVEL% NEQ 0 ( cd .. & echo [ERROR] CMake configuration failed. & exit /b 1 )
 cmake --build . --config Release
-if %ERRORLEVEL% NEQ 0 (
-    cd ..
-    echo [ERROR] CMake build failed.
-    exit /b 1
-)
-rem Release\mcp_test_runner.exe Release\sqlite-mcp-server.exe
-if %ERRORLEVEL% EQU 0 (
-    cd ..
-    echo [SUCCESS] CMake build and integration tests passed!
-    exit /b 0
-)
+if %ERRORLEVEL% NEQ 0 ( cd .. & echo [ERROR] CMake build failed. & exit /b 1 )
 cd ..
-exit /b 1
+echo [SUCCESS] CMake build passed!
+exit /b 0
 
 :NO_TOOLS
 echo [ERROR] Neither MSVC (cl.exe) nor CMake was found in PATH.
-echo [INFO] Please run this batch script from Developer Command Prompt for Visual Studio.
+echo [INFO] Please run this script from Developer Command Prompt for Visual Studio.
 exit /b 1

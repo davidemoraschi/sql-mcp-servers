@@ -32,7 +32,7 @@ jobs:
         env:
           SQLITE_DB_PATH: ${{ github.workspace }}/Chinook_Sqlite.sqlite
         run: |
-          ./bin/mcp_test_runner ./bin/sqlite-mcp-server
+          ./bin/mcp_test_runner_sqlite ./bin/sqlite-mcp-server
 
       - name: Build with CMake (Release)
         run: |
@@ -45,7 +45,7 @@ jobs:
         env:
           SQLITE_DB_PATH: ${{ github.workspace }}/Chinook_Sqlite.sqlite
         run: |
-          ./build-cmake/mcp_test_runner ./build-cmake/sqlite-mcp-server
+          ./build-cmake/mcp_test_runner_sqlite ./build-cmake/sqlite-mcp-server
 
   build-windows:
     name: Build & Test Windows (64-bit MSVC)
@@ -67,7 +67,7 @@ jobs:
       - name: Run Integration Tests on Chinook Database (Batch Build)
         env:
           SQLITE_DB_PATH: ${{ github.workspace }}/Chinook_Sqlite.sqlite
-        run: bin\mcp_test_runner.exe bin\sqlite-mcp-server.exe
+        run: bin\mcp_test_runner_sqlite.exe bin\sqlite-mcp-server.exe
 
       - name: Build with CMake (Release)
         run: |
@@ -80,7 +80,7 @@ jobs:
         env:
           SQLITE_DB_PATH: ${{ github.workspace }}/Chinook_Sqlite.sqlite
         run: |
-          .\build-cmake\Release\mcp_test_runner.exe .\build-cmake\Release\sqlite-mcp-server.exe
+          .\build-cmake\Release\mcp_test_runner_sqlite.exe .\build-cmake\Release\sqlite-mcp-server.exe
 
       - name: Build with CMake (Debug - Build Only)
         run: |
