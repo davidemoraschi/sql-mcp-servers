@@ -150,7 +150,7 @@ DbQueryResult db_execute_write(const char *sql_query, const char *params_json) {
     char *err_msg = NULL;
     if (sqlite3_exec(g_db, sql_query, NULL, NULL, &err_msg) != SQLITE_OK) {
         res.error_message = safe_strdup(err_msg ? err_msg : "Execution error");
-        if (err_msg) sqlite3_free(err_msg); return res;
+        if (err_msg) { sqlite3_free(err_msg); } return res;
     }
     int changes = sqlite3_changes(g_db);
     char bm[256], bj[256];
@@ -173,7 +173,7 @@ DbQueryResult db_backup(const char *target_path) {
     sqlite3 *pDest = NULL;
     if (sqlite3_open(path, &pDest) != SQLITE_OK) {
         res.error_message = safe_strdup(pDest ? sqlite3_errmsg(pDest) : "Failed to open backup target");
-        if (pDest) sqlite3_close(pDest); return res;
+        if (pDest) { sqlite3_close(pDest); } return res;
     }
     sqlite3_backup *pBackup = sqlite3_backup_init(pDest, "main", g_db, "main");
     if (pBackup) { sqlite3_backup_step(pBackup, -1); sqlite3_backup_finish(pBackup); }

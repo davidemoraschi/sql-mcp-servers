@@ -207,7 +207,7 @@ DbQueryResult db_import_data(const char *source_path, const char *destination_ta
             for (int i = 0; i < col_count; i++) free(col_names[i]);
             free(col_names); fclose(f);
             res.error_message = safe_strdup(err_msg ? err_msg : "CREATE TABLE failed");
-            if (err_msg) sqlite3_free(err_msg); return res;
+            if (err_msg) { sqlite3_free(err_msg); } return res;
         }
     }
 
