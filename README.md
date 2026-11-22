@@ -80,6 +80,46 @@ MIT License
 
 ---
 
+## PostgreSQL MCP Server (`postgres-mcp-server`)
+
+Same MCP loop and tool layer as the SQLite server, with a PostgreSQL backend. Connects via a raw TCP socket or Unix Domain Socket and speaks the PostgreSQL Frontend/Backend Wire Protocol (protocol version 3.0) directly — no libpq or any other external dependency.
+
+Authentication supports **SCRAM-SHA-256** (PostgreSQL 14+ default), **MD5**, and **cleartext** password methods — all implemented from scratch with no external dependencies.
+
+| Variable | Default | Description |
+|---|---|---|
+| `PGHOST` / `PG_HOST` | `localhost` | Hostname, IP address, or Unix-socket directory (path starting with `/`). |
+| `PGPORT` / `PG_PORT` | `5432` | TCP port or socket file suffix. |
+| `PGDATABASE` / `PG_DATABASE` | `postgres` | Target database name. |
+| `PGUSER` / `PG_USER` | `postgres` | Login role. |
+| `PGPASSWORD` / `PG_PASSWORD` | *(none)* | Password (memory-wiped after connect). |
+| `PGSSLMODE` / `PG_SSLMODE` | `prefer` | Reserved for future TLS support; currently plain-text only. |
+| `PGCONNECT_TIMEOUT` / `PG_CONNECT_TIMEOUT` | `10` | Connection timeout in seconds. |
+| `PG_QUERY_TIMEOUT` | `300` | Reserved placeholder (parity with Snowflake server). |
+| `PG_ACCESS_MODE` | `READWRITE` | `READONLY` disables `write_query`. |
+
+Differences from the SQLite tools: `backup_database` is not offered; `check_database_health` reports the database, user, server address, version, size, and server time.
+
+```json
+{
+  "mcpServers": {
+    "postgres": {
+      "command": "/path/to/postgres-mcp-server",
+      "env": {
+        "PG_HOST": "localhost",
+        "PG_PORT": "5432",
+        "PG_DATABASE": "mydb",
+        "PG_USER": "myuser",
+        "PG_PASSWORD": "secret",
+        "PG_ACCESS_MODE": "READONLY"
+      }
+    }
+  }
+}
+```
+
+---
+
 ## Snowflake MCP Server (`snowflake-mcp-server`)
 
 Same MCP loop and tool layer as the SQLite server, with a Snowflake backend. Authentication is Snowflake external-browser SSO (the sign-in runs on the first tool call, so `initialize` and `tools/list` answer immediately). The SSO URL is also printed to stderr.

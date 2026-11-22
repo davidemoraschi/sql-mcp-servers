@@ -48,6 +48,12 @@ if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] SQLite test runner compilation failed.
     exit /b 1
 )
+echo [INFO] Compiling PostgreSQL Test Runner...
+cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude src\test_runner_postgres.c /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\mcp_test_runner_postgres.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] PostgreSQL test runner compilation failed.
+    exit /b 1
+)
 
 echo [INFO] Compiling Test Runner (PostgreSQL)...
 cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude ^

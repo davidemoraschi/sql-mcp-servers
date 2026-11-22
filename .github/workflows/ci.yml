@@ -122,6 +122,15 @@ jobs:
           PGPASSWORD: postgres
         run: bin\mcp_test_runner_postgres.exe bin\postgres-mcp-server.exe
 
+      - name: Run PostgreSQL Integration Tests (Batch Build)
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGDATABASE: testdb
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bin\mcp_test_runner_postgres.exe bin\postgres-mcp-server.exe
+
       - name: Build with CMake (Release)
         run: |
           mkdir build-cmake
