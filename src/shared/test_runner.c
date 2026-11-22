@@ -251,9 +251,9 @@ int main(int argc, char **argv) {
         printf("FAIL (Resp: %s)\n", resp); failed++;
     }
 
-    /* TC-09: Chinook Data Export - Genre Table JSON Export */
+    /* TC-09: Chinook Data Export - Genre Table CSV Export */
     printf("[TC-09] Chinook data export - export_data (Genre)... ");
-    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"export_data\",\"arguments\":{\"table_name\":\"Genre\",\"format\":\"json\"}}}");
+    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"export_data\",\"arguments\":{\"target\":\"Genre\",\"destination_path\":\"Genre_export.csv\",\"format\":\"csv\"}}}");
     if (read_json_line(&proc, resp, sizeof(resp)) && verify_dual_channel_payload(resp, 9)) {
         printf("PASS\n"); passed++;
     } else {

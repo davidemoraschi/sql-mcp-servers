@@ -45,5 +45,5 @@ $CC -std=c11 -O2 -fomit-frame-pointer -ffunction-sections -fdata-sections \
     -Iinclude \
     src/shared/test_runner.c \
     -Wl,--gc-sections -Wl,-s \
-    -o bin/mcp_test_runner -lm -lpthread
+    -o bin/mcp_test_runner_sqlite -lm -lpthread
 echo "[SUCCESS] Test Runner compiled: bin/mcp_test_runner"
