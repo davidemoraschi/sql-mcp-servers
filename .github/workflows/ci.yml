@@ -10,6 +10,20 @@ jobs:
   build-linux:
     name: Build & Test Linux (64-bit)
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -34,6 +48,16 @@ jobs:
         run: |
           ./bin/mcp_test_runner_sqlite ./bin/sqlite-mcp-server
 
+      - name: Run Integration Tests on PostgreSQL (Shell Build)
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: postgres
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          ./bin/mcp_test_runner_postgres ./bin/postgres-mcp-server
+
       - name: Build with CMake (Release)
         run: |
           mkdir build-cmake
@@ -47,9 +71,33 @@ jobs:
         run: |
           ./build-cmake/mcp_test_runner_sqlite ./build-cmake/sqlite-mcp-server
 
+      - name: Run Integration Tests on PostgreSQL (CMake Build)
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: postgres
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          ./build-cmake/mcp_test_runner_postgres ./build-cmake/postgres-mcp-server
+
   build-windows:
     name: Build & Test Windows (64-bit MSVC)
     runs-on: windows-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -69,6 +117,15 @@ jobs:
           SQLITE_DB_PATH: ${{ github.workspace }}/Chinook_Sqlite.sqlite
         run: bin\mcp_test_runner_sqlite.exe bin\sqlite-mcp-server.exe
 
+      - name: Run Integration Tests on PostgreSQL (Batch Build)
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: postgres
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: bin\mcp_test_runner_postgres.exe bin\postgres-mcp-server.exe
+
       - name: Build with CMake (Release)
         run: |
           mkdir build-cmake
@@ -81,6 +138,16 @@ jobs:
           SQLITE_DB_PATH: ${{ github.workspace }}/Chinook_Sqlite.sqlite
         run: |
           .\build-cmake\Release\mcp_test_runner_sqlite.exe .\build-cmake\Release\sqlite-mcp-server.exe
+
+      - name: Run Integration Tests on PostgreSQL (CMake Release)
+        env:
+          PGHOST: localhost
+          PGPORT: 5432
+          PGDATABASE: postgres
+          PGUSER: postgres
+          PGPASSWORD: postgres
+        run: |
+          .\build-cmake\Release\mcp_test_runner_postgres.exe .\build-cmake\Release\postgres-mcp-server.exe
 
       - name: Build with CMake (Debug - Build Only)
         run: |

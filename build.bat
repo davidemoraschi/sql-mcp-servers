@@ -30,12 +30,31 @@ if %ERRORLEVEL% NEQ 0 (
     exit /b 1
 )
 
-echo [INFO] Compiling Test Runner...
+echo [INFO] Compiling PostgreSQL MCP Server...
+cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude ^
+    src\\postgres\\main_postgres.c src\\shared\\mcp_loop.c src\\shared\\json_rpc.c src\\shared\\rdbms_tools.c ^
+    src\\postgres\\db_postgres.c src\\postgres\\db_postgres_transfer.c src\\postgres\\pg_md5.c src\\postgres\\pg_scram.c src\\snowflake\\sf_buf.c ^
+    /link /LTCG /OPT:REF /OPT:ICF ws2_32.lib /OUT:bin\\postgres-mcp-server.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] PostgreSQL server compilation failed.
+    exit /b 1
+)
+
+echo [INFO] Compiling Test Runner (SQLite)...
 cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude ^
-    src\\shared\\test_runner.c ^
+    src\\sqlite\\test_runner_sqlite.c ^
     /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\\mcp_test_runner_sqlite.exe
 if %ERRORLEVEL% NEQ 0 (
-    echo [ERROR] Test runner compilation failed.
+    echo [ERROR] SQLite test runner compilation failed.
+    exit /b 1
+)
+
+echo [INFO] Compiling Test Runner (PostgreSQL)...
+cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude ^
+    src\\postgres\\test_runner_postgres.c ^
+    /link /LTCG /OPT:REF /OPT:ICF /OUT:bin\\mcp_test_runner_postgres.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] PostgreSQL test runner compilation failed.
     exit /b 1
 )
 

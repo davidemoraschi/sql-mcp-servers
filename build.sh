@@ -39,11 +39,30 @@ else
     echo "[WARN] libcurl not found: skipping snowflake-mcp-server (install libcurl4-openssl-dev)."
 fi
 
-echo "[INFO] Compiling Test Runner..."
+echo "[INFO] Compiling PostgreSQL MCP Server..."
+$CC -std=c11 -O2 -fomit-frame-pointer -ffunction-sections -fdata-sections \
+    -DNDEBUG -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE \
+    -Iinclude \
+    src/postgres/main_postgres.c src/shared/mcp_loop.c src/shared/json_rpc.c src/shared/rdbms_tools.c \
+    src/postgres/db_postgres.c src/postgres/db_postgres_transfer.c src/postgres/pg_md5.c src/postgres/pg_scram.c src/snowflake/sf_buf.c \
+    -Wl,--gc-sections -Wl,-s \
+    -o bin/postgres-mcp-server -lm -lpthread
+echo "[SUCCESS] Server compiled: bin/postgres-mcp-server"
+
+echo "[INFO] Compiling Test Runner (SQLite)..."
 $CC -std=c11 -O2 -fomit-frame-pointer -ffunction-sections -fdata-sections \
     -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE \
     -Iinclude \
-    src/shared/test_runner.c \
+    src/sqlite/test_runner_sqlite.c \
     -Wl,--gc-sections -Wl,-s \
     -o bin/mcp_test_runner_sqlite -lm -lpthread
-echo "[SUCCESS] Test Runner compiled: bin/mcp_test_runner"
+echo "[SUCCESS] Test Runner compiled: bin/mcp_test_runner_sqlite"
+
+echo "[INFO] Compiling Test Runner (PostgreSQL)..."
+$CC -std=c11 -O2 -fomit-frame-pointer -ffunction-sections -fdata-sections \
+    -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE \
+    -Iinclude \
+    src/postgres/test_runner_postgres.c \
+    -Wl,--gc-sections -Wl,-s \
+    -o bin/mcp_test_runner_postgres -lm -lpthread
+echo "[SUCCESS] Test Runner compiled: bin/mcp_test_runner_postgres"

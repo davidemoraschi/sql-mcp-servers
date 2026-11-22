@@ -25,11 +25,12 @@ add_executable(sqlite-mcp-server
 )
 
 # ---------------------------------------------------------------------------
-# Test runner
+# Test runners
 # ---------------------------------------------------------------------------
-add_executable(mcp_test_runner_sqlite src/shared/test_runner.c)
+add_executable(mcp_test_runner_sqlite src/sqlite/test_runner_sqlite.c)
+add_executable(mcp_test_runner_postgres src/postgres/test_runner_postgres.c)
 
-set(MCP_TARGETS sqlite-mcp-server mcp_test_runner_sqlite)
+set(MCP_TARGETS sqlite-mcp-server mcp_test_runner_sqlite mcp_test_runner_postgres)
 
 # ---------------------------------------------------------------------------
 # Snowflake MCP Server (optional: needs WinHTTP on Windows, libcurl elsewhere)
@@ -65,6 +66,25 @@ if(BUILD_SNOWFLAKE)
     endif()
     list(APPEND MCP_TARGETS snowflake-mcp-server)
 endif()
+
+# ---------------------------------------------------------------------------
+# PostgreSQL MCP Server (no external dependencies - pure wire protocol)
+# ---------------------------------------------------------------------------
+add_executable(postgres-mcp-server
+    src/postgres/main_postgres.c
+    src/shared/mcp_loop.c
+    src/shared/json_rpc.c
+    src/shared/rdbms_tools.c
+    src/postgres/db_postgres.c
+    src/postgres/db_postgres_transfer.c
+    src/postgres/pg_md5.c
+    src/postgres/pg_scram.c
+    src/snowflake/sf_buf.c
+)
+if(WIN32)
+    target_link_libraries(postgres-mcp-server PRIVATE ws2_32)
+endif()
+list(APPEND MCP_TARGETS postgres-mcp-server)
 
 # ---------------------------------------------------------------------------
 # Compiler flags (applied to all targets)

@@ -1,4 +1,4 @@
-# Cross-Platform Makefile for Standalone SQLite / Snowflake MCP Servers & Test Runner
+# Cross-Platform Makefile for SQLite / Snowflake / PostgreSQL MCP Servers & Test Runners
 CC      ?= gcc
 CFLAGS  ?= -std=c11 -O2 -fomit-frame-pointer -ffunction-sections -fdata-sections \
             -Wall -Wextra -DNDEBUG -DSQLITE_THREADSAFE=0 -DSQLITE_OMIT_LOAD_EXTENSION \
@@ -9,8 +9,8 @@ SQLITE_SRCS = src/sqlite/main.c src/shared/mcp_loop.c src/shared/json_rpc.c src/
               src/sqlite/db_sqlite_core.c src/sqlite/db_sqlite_transfer.c src/sqlite/sqlite3.c
 SQLITE_OBJS = $(SQLITE_SRCS:.c=.o)
 
-TEST_SRCS = src/shared/test_runner.c
-TEST_OBJS = $(TEST_SRCS:.c=.o)
+TEST_SQLITE_SRCS = src/sqlite/test_runner_sqlite.c
+TEST_SQLITE_OBJS = $(TEST_SQLITE_SRCS:.c=.o)
 
 SF_SRCS = src/snowflake/main_snowflake.c src/shared/mcp_loop.c src/shared/json_rpc.c src/shared/rdbms_tools.c \
           src/snowflake/db_snowflake_core.c src/snowflake/db_snowflake_transfer.c \
@@ -18,26 +18,41 @@ SF_SRCS = src/snowflake/main_snowflake.c src/shared/mcp_loop.c src/shared/json_r
           src/snowflake/sf_http.c src/snowflake/sf_loopback.c src/snowflake/sf_browser.c
 SF_OBJS = $(SF_SRCS:.c=.o)
 
+PG_SRCS = src/postgres/main_postgres.c src/shared/mcp_loop.c src/shared/json_rpc.c src/shared/rdbms_tools.c \
+          src/postgres/db_postgres.c src/postgres/db_postgres_transfer.c src/postgres/pg_md5.c src/postgres/pg_scram.c src/snowflake/sf_buf.c
+PG_OBJS = $(PG_SRCS:.c=.o)
+
+TEST_PG_SRCS = src/postgres/test_runner_postgres.c
+TEST_PG_OBJS = $(TEST_PG_SRCS:.c=.o)
+
 ifeq ($(OS),Windows_NT)
 SF_LIBS    = -lwinhttp -lws2_32 -lshell32
+PG_LIBS    = -lws2_32
 SF_CFLAGS  =
 SF_ENABLED = yes
 else
 SF_LIBS    = $(shell pkg-config --libs libcurl 2>/dev/null || echo -lcurl)
 SF_CFLAGS  = $(shell pkg-config --cflags libcurl 2>/dev/null)
 SF_ENABLED = $(shell pkg-config --exists libcurl 2>/dev/null && echo yes)
+PG_LIBS    =
 endif
 
-all: sqlite-mcp-server mcp_test_runner_sqlite $(if $(SF_ENABLED),snowflake-mcp-server)
+all: sqlite-mcp-server mcp_test_runner_sqlite postgres-mcp-server mcp_test_runner_postgres $(if $(SF_ENABLED),snowflake-mcp-server)
 
 sqlite-mcp-server: $(SQLITE_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ -lm -lpthread
 
-mcp_test_runner_sqlite: $(TEST_OBJS)
+mcp_test_runner_sqlite: $(TEST_SQLITE_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ -lm -lpthread
 
 snowflake-mcp-server: $(SF_OBJS)
 	$(CC) $(LDFLAGS) -o $@ $^ $(SF_LIBS) -lm
+
+postgres-mcp-server: $(PG_OBJS)
+	$(CC) $(LDFLAGS) -o $@ $^ $(PG_LIBS) -lm -lpthread
+
+mcp_test_runner_postgres: $(TEST_PG_OBJS)
+	$(CC) $(LDFLAGS) -o $@ $^ -lm -lpthread
 
 src/snowflake/sf_http.o: CFLAGS += $(SF_CFLAGS)
 
@@ -48,9 +63,11 @@ test: all
 	./mcp_test_runner_sqlite ./sqlite-mcp-server
 
 clean:
-	rm -f $(SQLITE_OBJS) $(TEST_OBJS) $(SF_OBJS) \
+	rm -f $(SQLITE_OBJS) $(TEST_SQLITE_OBJS) $(SF_OBJS) $(PG_OBJS) $(TEST_PG_OBJS) \
 	      sqlite-mcp-server sqlite-mcp-server.exe \
 	      mcp_test_runner_sqlite mcp_test_runner_sqlite.exe \
-	      snowflake-mcp-server snowflake-mcp-server.exe
+	      snowflake-mcp-server snowflake-mcp-server.exe \
+	      postgres-mcp-server postgres-mcp-server.exe \
+	      mcp_test_runner_postgres mcp_test_runner_postgres.exe
 
 .PHONY: all test clean
