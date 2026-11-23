@@ -12,7 +12,7 @@
 #include <string.h>
 #include "sf_http.h"
 
-#define SF_HTTP_MAX_RESPONSE (4u * 1024u * 1024u)
+#define SF_HTTP_MAX_RESPONSE (32u * 1024u * 1024u)
 
 static char *sf_http_dup(const char *s) {
     size_t n = strlen(s) + 1;
@@ -98,7 +98,8 @@ bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
     wchar_t *wpath = sf_to_wide(rq->path_and_query);
     wchar_t *wheaders = NULL;
     char *hdr = NULL;
-    size_t hdr_size = (rq->auth_header ? strlen(rq->auth_header) : 0) + 96;
+    size_t hdr_size = (rq->auth_header  ? strlen(rq->auth_header)  : 0)
+                    + (rq->extra_header ? strlen(rq->extra_header) : 0) + 256;
     size_t body_len = (!is_get && json_body) ? strlen(json_body) : 0;
     DWORD status = 0, status_sz = sizeof(status);
     DWORD protos = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
@@ -106,8 +107,11 @@ bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
 
     memset(resp, 0, sizeof(*resp));
     hdr = (char *)malloc(hdr_size);
-    if (hdr) snprintf(hdr, hdr_size, "Content-Type: application/json\r\nAccept: application/json\r\n%s%s",
-             rq->auth_header ? rq->auth_header : "", rq->auth_header ? "\r\n" : "");
+    if (hdr) snprintf(hdr, hdr_size, "%s%sAccept: application/json\r\n%s%s%s%s",
+             (!is_get && json_body) ? "Content-Type: application/json\r\n" : "",
+             (!is_get && json_body) ? "" : "",
+             rq->auth_header  ? rq->auth_header  : "", rq->auth_header  ? "\r\n" : "",
+             rq->extra_header ? rq->extra_header : "", rq->extra_header ? "\r\n" : "");
     wheaders = hdr ? sf_to_wide(hdr) : NULL;
     if (!whost || !wpath || !wheaders) { resp->error = sf_http_dup("Out of memory"); goto done; }
 
@@ -231,9 +235,10 @@ bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
     }
     snprintf(url, url_len, "https://%s%s", host, path_and_query);
 
-    hdrs = curl_slist_append(hdrs, "Content-Type: application/json");
     hdrs = curl_slist_append(hdrs, "Accept: application/json");
-    if (rq->auth_header) hdrs = curl_slist_append(hdrs, rq->auth_header);
+    if (!is_get && json_body) hdrs = curl_slist_append(hdrs, "Content-Type: application/json");
+    if (rq->auth_header)  hdrs = curl_slist_append(hdrs, rq->auth_header);
+    if (rq->extra_header) hdrs = curl_slist_append(hdrs, rq->extra_header);
     curl_easy_setopt(curl, CURLOPT_URL, url);
     if (is_get) {
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
@@ -279,11 +284,11 @@ bool sf_http_post_json(const char *host, const char *path_and_query,
                        const char *json_body, int timeout_ms,
                        SfHttpResponse *resp) {
     SfHttpRequest rq;
+    memset(&rq, 0, sizeof(rq));
     rq.method = "POST";
     rq.host = host;
     rq.path_and_query = path_and_query;
     rq.json_body = json_body;
-    rq.auth_header = NULL;
     rq.timeout_ms = timeout_ms;
     return sf_http_request(&rq, resp);
 }

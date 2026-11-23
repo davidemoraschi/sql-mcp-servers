@@ -175,6 +175,7 @@ static bool sq_session_expired(const JsonValue *root) {
            sq_code_is(root, "390114");
 }
 
+/* v1 in-progress codes kept for safety; v2 uses HTTP 202 checked in sq_execute */
 static bool sq_in_progress(const JsonValue *root) {
     return sq_code_is(root, "333333") || sq_code_is(root, "333334");
 }
@@ -196,6 +197,7 @@ static bool sq_do_request(const char *method, const char *path, const char *body
     auth = (char *)malloc(auth_size);
     if (!auth) { sq_set_error(res, "Out of memory"); return false; }
     snprintf(auth, auth_size, "Authorization: Snowflake Token=\"%s\"", g.token);
+    memset(&rq, 0, sizeof(rq));
     rq.method = method;
     rq.host = g.host;
     rq.path_and_query = path;
@@ -225,7 +227,9 @@ static char *sq_build_body(const char *sql) {
     return sf_buf_take(&b);
 }
 
-/* Execute without any session handling. Fills res; SQ_REAUTH if the session died. */
+/* Execute without any session handling. Fills res; SQ_REAUTH if the session died.
+ * Uses /queries/v1/query-request (SSO session token). On success, data.chunks
+ * contains S3 pre-signed URLs for additional result pages; stored in chunk_urls. */
 static SqOutcome sq_execute(const char *sql, SfQueryResult *res) {
     SfHttpResponse http;
     char req_id[37], path[96];
@@ -256,7 +260,7 @@ static SqOutcome sq_execute(const char *sql, SfQueryResult *res) {
             goto done;
         }
         if (sq_session_expired(res->root)) { out = SQ_REAUTH; goto done; }
-        if (sq_in_progress(res->root)) {            /* long-running: poll the result URL */
+        if (sq_in_progress(res->root)) {
             data = json_object_get(res->root, "data");
             url = json_object_get(data, "getResultUrl");
             if (!url || url->type != JSON_STRING || url->u.string[0] != '/' ||
@@ -376,7 +380,7 @@ SfQueryResult sf_session_query(const char *sql) {
         res.root = NULL;
         o = sq_execute(sql, &res);
         if (o != SQ_REAUTH) return res;
-        sq_wipe_free(&g.token);        /* session expired: sign in again, retry once */
+        sq_wipe_free(&g.token);
     }
     sq_set_error(&res, "Snowflake session expired and could not be renewed");
     return res;

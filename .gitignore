@@ -38,3 +38,5 @@ compile_commands.json
 *.sqlite
 *.sqlite3
 .amazonq/
+*.csv
+/SnowflakeMCP.cpp
