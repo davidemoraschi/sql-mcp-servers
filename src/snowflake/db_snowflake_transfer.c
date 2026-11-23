@@ -1,21 +1,10 @@
 /*
  * db_snowflake_transfer.c - Snowflake bulk data export and import tools
  *
- * Implements db_export_data() and db_import_data() for the Snowflake MCP server.
+ * Export: issues a single SELECT, writes the inline rowset (partition 0), then
+ *         fetches additional partitions via sf_session_fetch_partition.
  *
- * Export: runs a SELECT against Snowflake, streams the result set to a local
- *         file in csv, tsv, or json format.  The first SF_MAX_RESULT_ROWS rows
- *         of the first result chunk are written (same cap as read_query).
- *
- * Import: reads a local delimited file row-by-row and executes one INSERT per
- *         row against Snowflake.  auto_create_table infers TEXT columns from
- *         the header.  on_error=abort stops on the first failure; =continue
- *         skips bad rows and reports the error count in the response.
- *
- * Security: destination_path and source_path are checked for ".." traversal.
- *           destination_table is validated with db_validate_identifier().
- *           Row values are single-quoted with sf_buf_json_escaped() escaping
- *           (Snowflake does not support client-side parameter binding over REST).
+ * Import: reads a local delimited file and executes one INSERT per row.
  */
 
 #ifndef _CRT_SECURE_NO_WARNINGS
@@ -27,25 +16,56 @@
 #include "db_snowflake.h"
 #include "db_snowflake_internal.h"
 
-/* Strip trailing CR/LF. Returns new length. */
 static size_t strip_newline(char *line) {
     size_t ll = strlen(line);
-    while (ll > 0 && (line[ll - 1] == '\n' || line[ll - 1] == '\r')) line[--ll] = '\0';
+    while (ll > 0 && (line[ll-1] == '\n' || line[ll-1] == '\r')) line[--ll] = '\0';
     return ll;
 }
 
-/* Parse one delimited line into vals[0..col_count-1].
- * Strips surrounding double-quotes. tmp is modified in place. */
 static void parse_delimited_line(char *tmp, char delim, char **vals, int col_count) {
     char *p = tmp; int vi = 0;
     while (p && vi < col_count) {
         char *end = strchr(p, delim); if (end) *end = '\0';
         size_t fl = strlen(p);
-        if (fl >= 2 && p[0] == '"' && p[fl - 1] == '"') { p++; p[fl - 2] = '\0'; }
+        if (fl >= 2 && p[0] == '"' && p[fl-1] == '"') { p++; p[fl-2] = '\0'; }
         vals[vi++] = p;
         p = end ? end + 1 : NULL;
     }
     while (vi < col_count) vals[vi++] = NULL;
+}
+
+/* Write one JSON array of row-arrays to file. Returns number of rows written. */
+static long write_rowset(FILE *f, const JsonValue *rowset, size_t cols,
+                         char **col_names, bool is_json, char dc,
+                         char *num, long rows_so_far) {
+    if (!rowset || rowset->type != JSON_ARRAY) return 0;
+    size_t rows = rowset->u.array.count;
+    bool is_null;
+    for (size_t r = 0; r < rows; r++) {
+        const JsonValue *row = rowset->u.array.items[r];
+        if (!row || row->type != JSON_ARRAY) continue;
+        if (is_json) {
+            if (rows_so_far + (long)r > 0) fputs(",", f);
+            fputs("{", f);
+            for (size_t c = 0; c < cols; c++) {
+                const char *t = sf_cell_text(c < row->u.array.count ? row->u.array.items[c] : NULL,
+                                             num, 40, &is_null);
+                if (c > 0) fputs(",", f);
+                fprintf(f, "\"%s\":", col_names ? col_names[c] : "col");
+                if (is_null) fputs("null", f); else fprintf(f, "\"%s\"", t);
+            }
+            fputs("}", f);
+        } else {
+            for (size_t c = 0; c < cols; c++) {
+                if (c > 0) fputc(dc, f);
+                const char *t = sf_cell_text(c < row->u.array.count ? row->u.array.items[c] : NULL,
+                                             num, 40, &is_null);
+                if (!is_null) fputs(t, f);
+            }
+            fputc('\n', f);
+        }
+    }
+    return (long)rows;
 }
 
 DbQueryResult db_export_data(const char *target, const char *destination_path, const char *format,
@@ -78,75 +98,41 @@ DbQueryResult db_export_data(const char *target, const char *destination_path, c
     FILE *f = fopen(destination_path, "w");
     if (!f) { sf_query_free(&q); return sf_fail("Cannot open destination file for writing"); }
 
-    size_t cols = sf_col_count(&q), rows = sf_row_count(&q);
-    long rw = 0; char num[40]; bool is_null;
-
-    if (strcmp(fmt, "json") == 0) {
-        fputs("[", f);
-        for (size_t r = 0; r < rows; r++) {
-            if (rw > 0) fputs(",", f);
-            fputs("{", f);
-            for (size_t c = 0; c < cols; c++) {
-                const char *t = sf_cell_text(sf_rowset_cell(&q, r, c), num, sizeof(num), &is_null);
-                if (c > 0) fputs(",", f);
-                fprintf(f, "\"%s\":", sf_column_name(&q, c));
-                if (is_null) fputs("null", f); else fprintf(f, "\"%s\"", t);
-            }
-            fputs("}", f); rw++;
-        }
-    } else {
-        if (header) {
-            for (size_t c = 0; c < cols; c++) { if (c > 0) fputc(dc, f); fputs(sf_column_name(&q, c), f); }
-            fputc('\n', f);
-        }
-        for (size_t r = 0; r < rows; r++) {
-            for (size_t c = 0; c < cols; c++) {
-                if (c > 0) fputc(dc, f);
-                const char *t = sf_cell_text(sf_rowset_cell(&q, r, c), num, sizeof(num), &is_null);
-                if (!is_null) fputs(t, f);
-            }
-            fputc('\n', f); rw++;
-        }
+    size_t cols = sf_col_count(&q);
+    char **col_names = (char **)calloc(cols, sizeof(char *));
+    if (col_names) {
+        for (size_t c = 0; c < cols; c++)
+            col_names[c] = sf_safe_strdup(sf_column_name(&q, c));
     }
 
-    /* Fetch remaining partitions if any */
+    bool is_json = strcmp(fmt, "json") == 0;
+    char num[40];
+    long rw = 0;
+
+    if (is_json) fputs("[", f);
+    if (!is_json && header && col_names) {
+        for (size_t c = 0; c < cols; c++) { if (c > 0) fputc(dc, f); fputs(col_names[c], f); }
+        fputc('\n', f);
+    }
+
+    /* Partition 0: inline rowset */
+    rw += write_rowset(f, q.rowset, cols, col_names, is_json, dc, num, rw);
+
+    /* Additional partitions (1 .. partition_count-1) */
     if (q.more_chunks && q.statement_handle[0]) {
-        int total = q.partition_count; /* 0 = unknown, iterate until failure */
-        int part = 1;
-        bool is_json = strcmp(fmt, "json") == 0;
-        for (;;) {
-            if (total > 0 && part >= total) break;
-            SfQueryResult pq = sf_session_fetch_partition(q.statement_handle, part);
-            if (!pq.success) { sf_query_free(&pq); break; }
-            size_t prows = sf_row_count(&pq);
-            if (prows == 0) { sf_query_free(&pq); break; }
-            if (is_json) {
-                for (size_t r = 0; r < prows; r++) {
-                    fputs(",{", f);
-                    for (size_t c = 0; c < cols; c++) {
-                        const char *t = sf_cell_text(sf_rowset_cell(&pq, r, c), num, sizeof(num), &is_null);
-                        if (c > 0) fputs(",", f);
-                        fprintf(f, "\"%s\":", sf_column_name(&q, c));
-                        if (is_null) fputs("null", f); else fprintf(f, "\"%s\"", t);
-                    }
-                    fputs("}", f); rw++;
-                }
-            } else {
-                for (size_t r = 0; r < prows; r++) {
-                    for (size_t c = 0; c < cols; c++) {
-                        if (c > 0) fputc(dc, f);
-                        const char *t = sf_cell_text(sf_rowset_cell(&pq, r, c), num, sizeof(num), &is_null);
-                        if (!is_null) fputs(t, f);
-                    }
-                    fputc('\n', f); rw++;
-                }
-            }
+        int total = q.partition_count;
+        for (int p = 1; p < total; p++) {
+            SfQueryResult pq = sf_session_fetch_partition(q.statement_handle, p);
+            if (pq.success)
+                rw += write_rowset(f, pq.rowset, cols, col_names, is_json, dc, num, rw);
             sf_query_free(&pq);
-            part++;
         }
     }
-    if (strcmp(fmt, "json") == 0) fputs("]\n", f);
-    long bw = ftell(f); fclose(f); sf_query_free(&q);
+
+    if (is_json) fputs("]\n", f);
+    long bw = ftell(f); fclose(f);
+    sf_query_free(&q);
+    if (col_names) { for (size_t c = 0; c < cols; c++) free(col_names[c]); free(col_names); }
 
     SfBuf md = {NULL,0,0,false}, js = {NULL,0,0,false};
     sf_buf_printf(&md, "| status | target | format | rows | bytes | file |\n|---|---|---|---|---|---|\n| success | %s | %s | %ld | %ld | %s |", target, fmt, rw, bw, destination_path);
@@ -166,9 +152,9 @@ DbQueryResult db_import_data(const char *source_path, const char *destination_ta
     const char *on_err = on_error ? on_error : "abort";
     char dc = (delimiter && delimiter[0]) ? delimiter[0] : (strcmp(fmt, "tsv") == 0 ? '\t' : ',');
 
-    if (!source_path || !*source_path)            return sf_fail("source_path is required");
+    if (!source_path || !*source_path)             return sf_fail("source_path is required");
     if (!destination_table || !*destination_table) return sf_fail("destination_table is required");
-    if (strstr(source_path, ".."))                return sf_fail("Path traversal not allowed");
+    if (strstr(source_path, ".."))                 return sf_fail("Path traversal not allowed");
     if (!db_validate_identifier(destination_table) || strlen(destination_table) > 256)
         return sf_fail("Invalid destination_table identifier");
     if (g_read_only) return sf_fail("Server is in READONLY mode; import is disabled");
@@ -180,7 +166,6 @@ DbQueryResult db_import_data(const char *source_path, const char *destination_ta
     if (!fgets(line, sizeof(line), f)) { fclose(f); return sf_fail("Empty source file"); }
     strip_newline(line);
 
-    /* Discover column count from header */
     int col_count = 0;
     { char *tmp = sf_safe_strdup(line); char *p = tmp;
       while (p) { col_count++; p = strchr(p, dc); if (p) p++; }
@@ -191,7 +176,7 @@ DbQueryResult db_import_data(const char *source_path, const char *destination_ta
       while (p && ci < col_count) {
           char *end = strchr(p, dc); if (end) *end = '\0';
           size_t fl = strlen(p);
-          if (fl >= 2 && p[0] == '"' && p[fl - 1] == '"') { p++; p[fl - 2] = '\0'; }
+          if (fl >= 2 && p[0] == '"' && p[fl-1] == '"') { p++; p[fl-2] = '\0'; }
           col_names[ci++] = sf_safe_strdup(p);
           p = end ? end + 1 : NULL;
       }
@@ -223,7 +208,6 @@ DbQueryResult db_import_data(const char *source_path, const char *destination_ta
         char *tmp = sf_safe_strdup(line);
         parse_delimited_line(tmp, dc, vals, col_count);
 
-        /* Build a literal INSERT (Snowflake REST has no client-side binding) */
         SfBuf row_sql = {NULL,0,0,false};
         sf_buf_printf(&row_sql, "INSERT INTO %s VALUES (", destination_table);
         for (int i = 0; i < col_count; i++) {
