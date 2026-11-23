@@ -299,8 +299,21 @@ static SqOutcome sq_execute(const char *sql, SfQueryResult *res) {
     res->rowtype = json_object_get(data, "rowtype");
     res->rowset = json_object_get(data, "rowset");
     {
-        const JsonValue *chunks = json_object_get(data, "chunks");
-        res->more_chunks = chunks && chunks->type == JSON_ARRAY && chunks->u.array.count > 0;
+        const JsonValue *pi = json_object_get(data, "partitionInfo");
+        const JsonValue *sh = json_object_get(data, "statementHandle");
+        if (pi && pi->type == JSON_ARRAY && pi->u.array.count > 0) {
+            res->more_chunks = true;
+            res->partition_count = (int)pi->u.array.count + 1; /* +1 for partition 0 */
+        } else {
+            const JsonValue *chunks = json_object_get(data, "chunks");
+            res->more_chunks = chunks && chunks->type == JSON_ARRAY && chunks->u.array.count > 0;
+            res->partition_count = res->more_chunks ? 0 : 1;
+        }
+        if (sh && sh->type == JSON_STRING && sh->u.string) {
+            size_t slen = strlen(sh->u.string);
+            if (slen < sizeof(res->statement_handle))
+                memcpy(res->statement_handle, sh->u.string, slen + 1);
+        }
     }
     res->success = true;
     out = SQ_OK;
@@ -379,5 +392,37 @@ SfQueryResult sf_session_query(const char *sql) {
         sq_wipe_free(&g.token);        /* session expired: sign in again, retry once */
     }
     sq_set_error(&res, "Snowflake session expired and could not be renewed");
+    return res;
+}
+
+SfQueryResult sf_session_fetch_partition(const char *statement_handle, int partition) {
+    SfQueryResult res;
+    SfHttpResponse http;
+    char path[256];
+    const char *p;
+    memset(&res, 0, sizeof(res));
+    memset(&http, 0, sizeof(http));
+    if (!g.token) { sq_set_error(&res, "No active session"); return res; }
+    /* Validate handle: alphanumeric, hyphens, underscores only */
+    for (p = statement_handle; *p; p++) {
+        if (!isalnum((unsigned char)*p) && *p != '-' && *p != '_') {
+            sq_set_error(&res, "Invalid statement handle"); return res;
+        }
+    }
+    snprintf(path, sizeof(path), "/api/v2/statements/%s?partition=%d", statement_handle, partition);
+    if (!sq_do_request("GET", path, NULL, &http, &res)) return res;
+    res.root = json_parse(http.body);
+    sf_http_free_response(&http);
+    if (!res.root || res.root->type != JSON_OBJECT) {
+        sq_set_error(&res, "Unreadable partition response"); return res;
+    }
+    /* Partition responses have rowset at top level or under data */
+    res.rowset = json_object_get(res.root, "rowset");
+    if (!res.rowset) {
+        const JsonValue *data = json_object_get(res.root, "data");
+        res.rowset = json_object_get(data, "rowset");
+    }
+    if (!res.rowset) { sq_set_error(&res, "No rowset in partition response"); return res; }
+    res.success = true;
     return res;
 }

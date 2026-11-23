@@ -84,7 +84,7 @@ DbQueryResult db_export_data(const char *target, const char *destination_path, c
     if (strcmp(fmt, "json") == 0) {
         fputs("[", f);
         for (size_t r = 0; r < rows; r++) {
-            if (r > 0) fputs(",", f);
+            if (rw > 0) fputs(",", f);
             fputs("{", f);
             for (size_t c = 0; c < cols; c++) {
                 const char *t = sf_cell_text(sf_rowset_cell(&q, r, c), num, sizeof(num), &is_null);
@@ -94,7 +94,6 @@ DbQueryResult db_export_data(const char *target, const char *destination_path, c
             }
             fputs("}", f); rw++;
         }
-        fputs("]\n", f);
     } else {
         if (header) {
             for (size_t c = 0; c < cols; c++) { if (c > 0) fputc(dc, f); fputs(sf_column_name(&q, c), f); }
@@ -109,6 +108,44 @@ DbQueryResult db_export_data(const char *target, const char *destination_path, c
             fputc('\n', f); rw++;
         }
     }
+
+    /* Fetch remaining partitions if any */
+    if (q.more_chunks && q.statement_handle[0]) {
+        int total = q.partition_count; /* 0 = unknown, iterate until failure */
+        int part = 1;
+        bool is_json = strcmp(fmt, "json") == 0;
+        for (;;) {
+            if (total > 0 && part >= total) break;
+            SfQueryResult pq = sf_session_fetch_partition(q.statement_handle, part);
+            if (!pq.success) { sf_query_free(&pq); break; }
+            size_t prows = sf_row_count(&pq);
+            if (prows == 0) { sf_query_free(&pq); break; }
+            if (is_json) {
+                for (size_t r = 0; r < prows; r++) {
+                    fputs(",{", f);
+                    for (size_t c = 0; c < cols; c++) {
+                        const char *t = sf_cell_text(sf_rowset_cell(&pq, r, c), num, sizeof(num), &is_null);
+                        if (c > 0) fputs(",", f);
+                        fprintf(f, "\"%s\":", sf_column_name(&q, c));
+                        if (is_null) fputs("null", f); else fprintf(f, "\"%s\"", t);
+                    }
+                    fputs("}", f); rw++;
+                }
+            } else {
+                for (size_t r = 0; r < prows; r++) {
+                    for (size_t c = 0; c < cols; c++) {
+                        if (c > 0) fputc(dc, f);
+                        const char *t = sf_cell_text(sf_rowset_cell(&pq, r, c), num, sizeof(num), &is_null);
+                        if (!is_null) fputs(t, f);
+                    }
+                    fputc('\n', f); rw++;
+                }
+            }
+            sf_query_free(&pq);
+            part++;
+        }
+    }
+    if (strcmp(fmt, "json") == 0) fputs("]\n", f);
     long bw = ftell(f); fclose(f); sf_query_free(&q);
 
     SfBuf md = {NULL,0,0,false}, js = {NULL,0,0,false};

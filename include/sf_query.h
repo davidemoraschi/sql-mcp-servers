@@ -32,7 +32,9 @@ typedef struct {
     JsonValue *root;              /* owns everything below                      */
     const JsonValue *rowtype;     /* array of column descriptors ({"name":..})  */
     const JsonValue *rowset;      /* array of rows; each row is an array        */
-    bool more_chunks;             /* result continues in chunks not downloaded  */
+    bool more_chunks;             /* result continues in partitions             */
+    int  partition_count;         /* total partitions (0 = unknown/single)      */
+    char statement_handle[64];    /* statementHandle for partition fetching     */
 } SfQueryResult;
 
 /* Validate and copy the configuration. No network access. */
@@ -40,6 +42,13 @@ bool sf_session_configure(const SfSessionConfig *cfg, char *err, size_t err_size
 
 /* Run one SQL statement. Release with sf_query_free(). */
 SfQueryResult sf_session_query(const char *sql);
+
+/*
+ * Fetch one partition (1-based index) of a previously executed statement.
+ * The returned SfQueryResult has rowtype=NULL (use the original query's rowtype)
+ * and rowset pointing into the new root. Release with sf_query_free().
+ */
+SfQueryResult sf_session_fetch_partition(const char *statement_handle, int partition);
 
 void sf_query_free(SfQueryResult *res);
 
