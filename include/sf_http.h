@@ -42,6 +42,9 @@ bool sf_http_post_json(const char *host, const char *path_and_query,
                        const char *json_body, int timeout_ms,
                        SfHttpResponse *resp);
 
+/* GET an absolute https:// URL (e.g. pre-signed S3). No auth header. */
+bool sf_http_get_absolute(const char *absolute_url, int timeout_ms, SfHttpResponse *resp);
+
 void sf_http_free_response(SfHttpResponse *resp);
 
 #endif /* SF_HTTP_H */

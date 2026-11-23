@@ -292,3 +292,23 @@ bool sf_http_post_json(const char *host, const char *path_and_query,
     rq.timeout_ms = timeout_ms;
     return sf_http_request(&rq, resp);
 }
+
+bool sf_http_get_absolute(const char *absolute_url, int timeout_ms, SfHttpResponse *resp) {
+    /* Parse host out of https://host/path?query */
+    const char *p = absolute_url;
+    memset(resp, 0, sizeof(*resp));
+    if (strncmp(p, "https://", 8) == 0) p += 8;
+    else if (strncmp(p, "http://", 7) == 0) p += 7;
+    else { resp->error = sf_http_dup("Only https:// URLs are supported"); return false; }
+    const char *slash = strchr(p, '/');
+    size_t hlen = slash ? (size_t)(slash - p) : strlen(p);
+    char *host = (char *)malloc(hlen + 1);
+    if (!host) { resp->error = sf_http_dup("Out of memory"); return false; }
+    memcpy(host, p, hlen); host[hlen] = '\0';
+    const char *path = slash ? slash : "/";
+    SfHttpRequest rq; memset(&rq, 0, sizeof(rq));
+    rq.method = "GET"; rq.host = host; rq.path_and_query = path; rq.timeout_ms = timeout_ms;
+    bool ok = sf_http_request(&rq, resp);
+    free(host);
+    return ok;
+}
