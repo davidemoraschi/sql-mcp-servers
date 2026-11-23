@@ -51,7 +51,28 @@ void tools_handle_list(const char *id) {
         "{\"name\":\"infer_relationships\",\"description\":\"Infer primary and foreign key relationships across database tables\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}},"
         "{\"name\":\"generate_erd\",\"description\":\"Generate PlantUML ERD schema diagram of the database\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}},"
         "{\"name\":\"list_tables\",\"description\":\"List all database tables, views, and row counts\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}},"
-        "{\"name\":\"export_data\",\"description\":\"Export database table contents to CSV or JSON format\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"table_name\":{\"type\":\"string\",\"description\":\"Table name to export\"},\"format\":{\"type\":\"string\",\"enum\":[\"csv\",\"json\"],\"description\":\"Export format\"}},\"required\":[\"table_name\",\"format\"]},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"export_data\",\"description\":\"Export a table, view, or SELECT query to a local file (CSV, TSV, JSON, or SQL dump)\","
+        "\"inputSchema\":{\"type\":\"object\",\"properties\":{"
+        "\"target\":{\"type\":\"string\",\"description\":\"Table name, view name, or raw SQL SELECT query to export\"},"
+        "\"destination_path\":{\"type\":\"string\",\"description\":\"Absolute or relative local file path to write the exported file\"},"
+        "\"format\":{\"type\":\"string\",\"enum\":[\"csv\",\"tsv\",\"json\",\"sql_dump\"],\"default\":\"csv\",\"description\":\"Output format\"},"
+        "\"compression\":{\"type\":\"string\",\"enum\":[\"none\",\"gzip\"],\"default\":\"none\"},"
+        "\"header\":{\"type\":\"boolean\",\"default\":true},"
+        "\"delimiter\":{\"type\":\"string\",\"default\":\",\"},"
+        "\"max_file_size_mb\":{\"type\":\"integer\",\"default\":250}},"
+        "\"required\":[\"target\",\"destination_path\"]},\"annotations\":{\"readOnlyHint\":true}},"
+        "{\"name\":\"import_data\",\"description\":\"Import data from a local file (CSV, TSV, JSON) into a database table\","
+        "\"inputSchema\":{\"type\":\"object\",\"properties\":{"
+        "\"source_path\":{\"type\":\"string\",\"description\":\"Absolute or relative local file path of the file to ingest\"},"
+        "\"destination_table\":{\"type\":\"string\",\"description\":\"Target database table name\"},"
+        "\"format\":{\"type\":\"string\",\"enum\":[\"csv\",\"tsv\",\"json\",\"sql_dump\"],\"default\":\"csv\"},"
+        "\"compression\":{\"type\":\"string\",\"enum\":[\"none\",\"gzip\"],\"default\":\"none\"},"
+        "\"header\":{\"type\":\"boolean\",\"default\":true},"
+        "\"delimiter\":{\"type\":\"string\",\"default\":\",\"},"
+        "\"on_error\":{\"type\":\"string\",\"enum\":[\"abort\",\"continue\",\"skip_file\"],\"default\":\"abort\"},"
+        "\"auto_create_table\":{\"type\":\"boolean\",\"default\":false},"
+        "\"optimize_speed\":{\"type\":\"boolean\",\"default\":true}},"
+        "\"required\":[\"source_path\",\"destination_table\"]},\"annotations\":{\"idempotentHint\":false}},"
         "{\"name\":\"check_database_health\",\"description\":\"%s\",\"inputSchema\":{\"type\":\"object\",\"additionalProperties\":false},\"annotations\":{\"readOnlyHint\":true}}"
         "]}",
         g_profile.db_label, g_profile.has_backup ? backup_tool : "", g_profile.health_desc);
@@ -179,9 +200,31 @@ void tools_handle_call(const char *id, const JsonValue *params) {
     } else if (strcmp(tool_name, "list_tables") == 0) {
         res = db_list_tables();
     } else if (strcmp(tool_name, "export_data") == 0) {
-        JsonValue *v_tbl = v_args ? json_object_get(v_args, "table_name") : NULL;
-        JsonValue *v_fmt = v_args ? json_object_get(v_args, "format") : NULL;
-        res = db_export_data(json_string_value(v_tbl), json_string_value(v_fmt));
+        JsonValue *v_tgt  = v_args ? json_object_get(v_args, "target") : NULL;
+        JsonValue *v_dst  = v_args ? json_object_get(v_args, "destination_path") : NULL;
+        JsonValue *v_fmt  = v_args ? json_object_get(v_args, "format") : NULL;
+        JsonValue *v_cmp  = v_args ? json_object_get(v_args, "compression") : NULL;
+        JsonValue *v_hdr  = v_args ? json_object_get(v_args, "header") : NULL;
+        JsonValue *v_del  = v_args ? json_object_get(v_args, "delimiter") : NULL;
+        bool hdr = v_hdr ? (v_hdr->type == JSON_BOOL ? v_hdr->u.boolean : true) : true;
+        res = db_export_data(json_string_value(v_tgt), json_string_value(v_dst),
+                             json_string_value(v_fmt), json_string_value(v_cmp), hdr, json_string_value(v_del));
+    } else if (strcmp(tool_name, "import_data") == 0) {
+        JsonValue *v_src  = v_args ? json_object_get(v_args, "source_path") : NULL;
+        JsonValue *v_dst  = v_args ? json_object_get(v_args, "destination_table") : NULL;
+        JsonValue *v_fmt  = v_args ? json_object_get(v_args, "format") : NULL;
+        JsonValue *v_cmp  = v_args ? json_object_get(v_args, "compression") : NULL;
+        JsonValue *v_hdr  = v_args ? json_object_get(v_args, "header") : NULL;
+        JsonValue *v_del  = v_args ? json_object_get(v_args, "delimiter") : NULL;
+        JsonValue *v_oer  = v_args ? json_object_get(v_args, "on_error") : NULL;
+        JsonValue *v_act  = v_args ? json_object_get(v_args, "auto_create_table") : NULL;
+        JsonValue *v_opt  = v_args ? json_object_get(v_args, "optimize_speed") : NULL;
+        bool hdr = v_hdr ? (v_hdr->type == JSON_BOOL ? v_hdr->u.boolean : true) : true;
+        bool act = v_act ? (v_act->type == JSON_BOOL ? v_act->u.boolean : false) : false;
+        bool opt = v_opt ? (v_opt->type == JSON_BOOL ? v_opt->u.boolean : true) : true;
+        res = db_import_data(json_string_value(v_src), json_string_value(v_dst),
+                             json_string_value(v_fmt), json_string_value(v_cmp), hdr, json_string_value(v_del),
+                             json_string_value(v_oer), act, opt);
     } else if (strcmp(tool_name, "check_database_health") == 0) {
         res = db_check_health();
     } else {

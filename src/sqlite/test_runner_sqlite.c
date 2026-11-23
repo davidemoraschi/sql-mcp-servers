@@ -251,37 +251,87 @@ int main(int argc, char **argv) {
         printf("FAIL (Resp: %s)\n", resp); failed++;
     }
 
-    /* TC-09: Chinook Data Export - Genre Table JSON Export */
+    /* TC-09: Chinook Data Export - Genre Table CSV Export */
     printf("[TC-09] Chinook data export - export_data (Genre)... ");
-    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"export_data\",\"arguments\":{\"table_name\":\"Genre\",\"format\":\"json\"}}}");
+    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":9,\"method\":\"tools/call\",\"params\":{\"name\":\"export_data\",\"arguments\":{\"target\":\"Genre\",\"destination_path\":\"Genre_export.csv\",\"format\":\"csv\"}}}");
     if (read_json_line(&proc, resp, sizeof(resp)) && verify_dual_channel_payload(resp, 9)) {
         printf("PASS\n"); passed++;
     } else {
         printf("FAIL (Resp: %s)\n", resp); failed++;
     }
 
-    /* TC-10: Missing Parameters Error Handling */
-    printf("[TC-10] Missing parameters error handling... ");
-    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"tools/call\"}");
-    if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":10") && strstr(resp, "error")) {
+    /* TC-10: Create transfer_test table with 1000 rows */
+    printf("[TC-10] Create transfer_test table... ");
+    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"tools/call\",\"params\":{\"name\":\"write_query\",\"arguments\":{\"sql\":\"CREATE TABLE IF NOT EXISTS transfer_test (id INTEGER PRIMARY KEY, val TEXT, num REAL);\"}}}" );
+    if (read_json_line(&proc, resp, sizeof(resp)) && verify_dual_channel_payload(resp, 10)) {
+        printf("PASS\n"); passed++;
+    } else { printf("FAIL (Resp: %s)\n", resp); failed++; }
+
+    printf("[TC-11] Populate transfer_test with 1000 rows... ");
+    send_json_line(&proc,
+        "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tools/call\",\"params\":{\"name\":\"write_query\",\"arguments\":{\"sql\":"
+        "\"WITH RECURSIVE r(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM r WHERE i<1000) "
+        "INSERT INTO transfer_test SELECT i, hex(i*1234567), round(i*3.14159,4) FROM r;\"}}}" );
+    if (read_json_line(&proc, resp, sizeof(resp)) && verify_dual_channel_payload(resp, 11)) {
+        printf("PASS\n"); passed++;
+    } else { printf("FAIL (Resp: %s)\n", resp); failed++; }
+
+    printf("[TC-12] Export transfer_test to CSV... ");
+    send_json_line(&proc,
+        "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"tools/call\",\"params\":{\"name\":\"export_data\",\"arguments\":"
+        "{\"target\":\"transfer_test\",\"destination_path\":\"transfer_test_export.csv\",\"format\":\"csv\"}}}" );
+    if (read_json_line(&proc, resp, sizeof(resp)) && verify_dual_channel_payload(resp, 12) && strstr(resp, "success")) {
+        printf("PASS\n"); passed++;
+    } else { printf("FAIL (Resp: %s)\n", resp); failed++; }
+
+    printf("[TC-13] Import CSV into transfer_test_imported... ");
+    send_json_line(&proc,
+        "{\"jsonrpc\":\"2.0\",\"id\":13,\"method\":\"tools/call\",\"params\":{\"name\":\"import_data\",\"arguments\":"
+        "{\"source_path\":\"transfer_test_export.csv\",\"destination_table\":\"transfer_test_imported\","
+        "\"format\":\"csv\",\"auto_create_table\":true,\"optimize_speed\":true}}}" );
+    if (read_json_line(&proc, resp, sizeof(resp)) && verify_dual_channel_payload(resp, 13) && strstr(resp, "success")) {
+        printf("PASS\n"); passed++;
+    } else { printf("FAIL (Resp: %s)\n", resp); failed++; }
+
+    printf("[TC-14] Verify row count parity (1000 rows in both tables)... ");
+    send_json_line(&proc,
+        "{\"jsonrpc\":\"2.0\",\"id\":14,\"method\":\"tools/call\",\"params\":{\"name\":\"read_query\",\"arguments\":"
+        "{\"sql\":\"SELECT (SELECT COUNT(*) FROM transfer_test) AS src, (SELECT COUNT(*) FROM transfer_test_imported) AS dst;\"}}}" );
+    if (read_json_line(&proc, resp, sizeof(resp)) && verify_dual_channel_payload(resp, 14)
+        && strstr(resp, "\"src\":\"1000\"") && strstr(resp, "\"dst\":\"1000\"")) {
+        printf("PASS\n"); passed++;
+    } else { printf("FAIL (Resp: %s)\n", resp); failed++; }
+
+    printf("[TC-15] Cleanup transfer test tables... ");
+    send_json_line(&proc,
+        "{\"jsonrpc\":\"2.0\",\"id\":15,\"method\":\"tools/call\",\"params\":{\"name\":\"write_query\",\"arguments\":"
+        "{\"sql\":\"DROP TABLE IF EXISTS transfer_test; DROP TABLE IF EXISTS transfer_test_imported;\"}}}" );
+    if (read_json_line(&proc, resp, sizeof(resp)) && verify_dual_channel_payload(resp, 15)) {
+        printf("PASS\n"); passed++;
+    } else { printf("FAIL (Resp: %s)\n", resp); failed++; }
+
+    /* TC-16: Missing Parameters Error Handling */
+    printf("[TC-16] Missing parameters error handling... ");
+    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":16,\"method\":\"tools/call\"}");
+    if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":16") && strstr(resp, "error")) {
         printf("PASS\n"); passed++;
     } else {
         printf("FAIL (Resp: %s)\n", resp); failed++;
     }
 
-    /* TC-11: Malicious Identifier Sanitization */
-    printf("[TC-11] Identifier sanitization check... ");
-    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"tools/call\",\"params\":{\"name\":\"describe_table\",\"arguments\":{\"table_name\":\"users; DROP TABLE users;\"}}}");
-    if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":11")) {
+    /* TC-17: Malicious Identifier Sanitization */
+    printf("[TC-17] Identifier sanitization check... ");
+    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":17,\"method\":\"tools/call\",\"params\":{\"name\":\"describe_table\",\"arguments\":{\"table_name\":\"users; DROP TABLE users;\"}}}");
+    if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":17")) {
         printf("PASS\n"); passed++;
     } else {
         printf("FAIL (Resp: %s)\n", resp); failed++;
     }
 
-    /* TC-12: Unknown Method Error Handling */
-    printf("[TC-12] Unknown method error handling... ");
-    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":12,\"method\":\"unknown_method\"}");
-    if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":12") && strstr(resp, "error")) {
+    /* TC-18: Unknown Method Error Handling */
+    printf("[TC-18] Unknown method error handling... ");
+    send_json_line(&proc, "{\"jsonrpc\":\"2.0\",\"id\":18,\"method\":\"unknown_method\"}");
+    if (read_json_line(&proc, resp, sizeof(resp)) && strstr(resp, "\"id\":18") && strstr(resp, "error")) {
         printf("PASS\n"); passed++;
     } else {
         printf("FAIL (Resp: %s)\n", resp); failed++;

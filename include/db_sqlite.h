@@ -47,7 +47,8 @@ DbQueryResult db_describe_table(const char *table_name);
 DbQueryResult db_infer_relationships(void);
 DbQueryResult db_generate_erd_plantuml(void);
 DbQueryResult db_list_tables(void);
-DbQueryResult db_export_data(const char *table_name, const char *format);
+DbQueryResult db_export_data(const char *target, const char *destination_path, const char *format, const char *compression, bool header, const char *delimiter);
+DbQueryResult db_import_data(const char *source_path, const char *destination_table, const char *format, const char *compression, bool header, const char *delimiter, const char *on_error, bool auto_create_table, bool optimize_speed);
 DbQueryResult db_check_health(void);
 
 #endif /* DB_SQLITE_H */
