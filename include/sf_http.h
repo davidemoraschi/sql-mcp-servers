@@ -16,6 +16,7 @@ typedef struct {
     char *body;        /* NUL-terminated response body (may be NULL)       */
     size_t body_len;
     char *error;       /* transport error message, NULL on success         */
+    char *link_header; /* value of the Link response header, or NULL       */
 } SfHttpResponse;
 
 typedef struct {

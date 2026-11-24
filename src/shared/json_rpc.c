@@ -129,8 +129,9 @@ JsonValue *json_parse_value(const char **src) {
         p++;
         p = skip_whitespace(p);
         while (*p && *p != '}') {
+            const char *before = p;
             char *key = parse_string_token(&p);
-            if (!key) break;
+            if (!key || p == before) break;  /* truncated: stop */
             p = skip_whitespace(p);
             if (*p == ':') p++;
             JsonValue *v = json_parse_value(&p);
@@ -153,7 +154,9 @@ JsonValue *json_parse_value(const char **src) {
         p++;
         p = skip_whitespace(p);
         while (*p && *p != ']') {
+            const char *before = p;
             JsonValue *v = json_parse_value(&p);
+            if (!v || p == before) break;  /* truncated / unparseable: stop, don't loop forever */
             val->u.array.items = realloc(val->u.array.items, sizeof(JsonValue *) * (val->u.array.count + 1));
             val->u.array.items[val->u.array.count++] = v;
             p = skip_whitespace(p);

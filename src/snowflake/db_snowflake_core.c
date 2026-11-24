@@ -195,8 +195,90 @@ DbQueryResult sf_format_result(const SfQueryResult *q) {
 DbQueryResult sf_run(const char *sql) {
     if (!g_ready) return sf_fail("Snowflake connection not configured");
     SfQueryResult q = sf_session_query(sql);
-    DbQueryResult res = q.success ? sf_format_result(&q) : sf_fail(q.error_message ? q.error_message : "Query failed");
-    sf_query_free(&q); return res;
+    if (!q.success) {
+        DbQueryResult r = sf_fail(q.error_message ? q.error_message : "Query failed");
+        sf_query_free(&q); return r;
+    }
+
+    /* Build result: format partition 0, then append rows from further partitions */
+    DbQueryResult res; memset(&res, 0, sizeof(res));
+    SfBuf md = {NULL,0,0,false}, js = {NULL,0,0,false};
+    size_t cols = sf_col_count(&q);
+    char num[40];
+    long shown = 0;
+
+    /* Header row */
+    sf_buf_str(&md, "|");
+    for (size_t c = 0; c < cols; c++) { sf_buf_str(&md, " "); sf_md_cell(&md, sf_column_name(&q, c)); sf_buf_str(&md, " |"); }
+    sf_buf_str(&md, "\n|");
+    for (size_t c = 0; c < cols; c++) sf_buf_str(&md, "---|");
+    sf_buf_str(&js, "[");
+
+    /* Helper: append one rowset up to the cap */
+    #define APPEND_ROWSET(rowset_ptr) do { \
+        const JsonValue *_rs = (rowset_ptr); \
+        if (_rs && _rs->type == JSON_ARRAY) { \
+            size_t _rows = _rs->u.array.count; \
+            for (size_t _r = 0; _r < _rows && shown < SF_MAX_RESULT_ROWS; _r++, shown++) { \
+                bool _null; const char *_t; \
+                const JsonValue *_row = _rs->u.array.items[_r]; \
+                if (!_row || _row->type != JSON_ARRAY) continue; \
+                sf_buf_str(&md, "\n|"); \
+                sf_buf_str(&js, shown ? ",{" : "{"); \
+                for (size_t _c = 0; _c < cols; _c++) { \
+                    _t = sf_cell_text(_c < _row->u.array.count ? _row->u.array.items[_c] : NULL, num, sizeof(num), &_null); \
+                    sf_buf_str(&md, " "); sf_md_cell(&md, _t); sf_buf_str(&md, " |"); \
+                    sf_buf_str(&js, _c ? ",\"" : "\""); sf_buf_json_escaped(&js, sf_column_name(&q, _c)); \
+                    if (_null) sf_buf_str(&js, "\":null"); \
+                    else { sf_buf_str(&js, "\":\""); sf_buf_json_escaped(&js, _t); sf_buf_str(&js, "\""); } \
+                } \
+                sf_buf_str(&js, "}"); \
+            } \
+        } \
+    } while(0)
+
+    APPEND_ROWSET(q.rowset);
+
+    if (q.more_chunks && shown < SF_MAX_RESULT_ROWS) {
+        if (q.next_page_url[0]) {
+            /* v1 Link pagination */
+            char cur_url[512];
+            snprintf(cur_url, sizeof(cur_url), "%s", q.next_page_url);
+            while (cur_url[0] && shown < SF_MAX_RESULT_ROWS) {
+                SfQueryResult pq = sf_session_fetch_page(cur_url);
+                if (!pq.success) { sf_query_free(&pq); break; }
+                long before = shown;
+                APPEND_ROWSET(pq.rowset);
+                snprintf(cur_url, sizeof(cur_url), "%s", pq.next_page_url);
+                bool last = pq.is_last_page;
+                sf_query_free(&pq);
+                if (shown == before || last) break;
+            }
+        } else if (q.statement_handle[0]) {
+            /* v2 partition pagination */
+            for (int p = 1; (q.partition_count == 0 || p < q.partition_count) && shown < SF_MAX_RESULT_ROWS; p++) {
+                SfQueryResult pq = sf_session_fetch_partition(q.statement_handle, p);
+                if (!pq.success) { sf_query_free(&pq); break; }
+                long before = shown;
+                APPEND_ROWSET(pq.rowset);
+                sf_query_free(&pq);
+                if (shown == before) break;
+            }
+        }
+    }
+    #undef APPEND_ROWSET
+
+    sf_buf_str(&js, "]");
+    if (q.more_chunks)
+        sf_buf_printf(&md, "\n\n(Result truncated: showing %ld of 1000+ rows.)", shown);
+
+    sf_query_free(&q);
+    res.markdown_table = sf_buf_take(&md); res.json_structured = sf_buf_take(&js);
+    if (!res.markdown_table || !res.json_structured) {
+        free(res.markdown_table); free(res.json_structured);
+        res.error_message = sf_safe_strdup("Out of memory"); return res;
+    }
+    res.success = true; res.rows_affected = (int)shown; return res;
 }
 
 /* ---------- db_* interface ---------- */

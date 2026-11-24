@@ -118,14 +118,33 @@ DbQueryResult db_export_data(const char *target, const char *destination_path, c
     /* Partition 0: inline rowset */
     rw += write_rowset(f, q.rowset, cols, col_names, is_json, dc, num, rw);
 
-    /* Additional partitions (1 .. partition_count-1) */
-    if (q.more_chunks && q.statement_handle[0]) {
-        int total = q.partition_count;
-        for (int p = 1; p < total; p++) {
-            SfQueryResult pq = sf_session_fetch_partition(q.statement_handle, p);
-            if (pq.success)
-                rw += write_rowset(f, pq.rowset, cols, col_names, is_json, dc, num, rw);
-            sf_query_free(&pq);
+    /* Additional pages/partitions */
+    if (q.more_chunks) {
+        if (q.next_page_url[0]) {
+            /* v1 Link pagination */
+            char cur_url[512];
+            snprintf(cur_url, sizeof(cur_url), "%s", q.next_page_url);
+            while (cur_url[0]) {
+                SfQueryResult pq = sf_session_fetch_page(cur_url);
+                if (!pq.success) { sf_query_free(&pq); break; }
+                long written = write_rowset(f, pq.rowset, cols, col_names, is_json, dc, num, rw);
+                rw += written;
+                snprintf(cur_url, sizeof(cur_url), "%s", pq.next_page_url);
+                bool last = pq.is_last_page;
+                sf_query_free(&pq);
+                if (written == 0 || last) break;
+            }
+        } else if (q.statement_handle[0]) {
+            /* v2 partition pagination */
+            int total = q.partition_count;
+            for (int p = 1; total == 0 || p < total; p++) {
+                SfQueryResult pq = sf_session_fetch_partition(q.statement_handle, p);
+                if (!pq.success) { sf_query_free(&pq); break; }
+                long written = write_rowset(f, pq.rowset, cols, col_names, is_json, dc, num, rw);
+                rw += written;
+                sf_query_free(&pq);
+                if (written == 0) break;
+            }
         }
     }
 

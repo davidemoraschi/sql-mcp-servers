@@ -32,9 +32,11 @@ typedef struct {
     JsonValue *root;              /* owns everything below                      */
     const JsonValue *rowtype;     /* array of column descriptors ({"name":..})  */
     const JsonValue *rowset;      /* array of rows; each row is an array        */
-    bool more_chunks;             /* result continues in partitions             */
-    int  partition_count;         /* total partitions (0 = unknown/single)      */
-    char statement_handle[64];    /* statementHandle for partition fetching     */
+    bool more_chunks;             /* result continues in partitions/pages       */
+    int  partition_count;         /* total partitions (0 = unknown); v2 only    */
+    char statement_handle[64];    /* statementHandle for v2 partition fetching  */
+    char next_page_url[512];      /* rel="next" URL for v1 Link pagination      */
+    bool is_last_page;            /* true when rel="last" seen in Link header   */
 } SfQueryResult;
 
 /* Validate and copy the configuration. No network access. */
@@ -49,6 +51,12 @@ SfQueryResult sf_session_query(const char *sql);
  * and rowset pointing into the new root. Release with sf_query_free().
  */
 SfQueryResult sf_session_fetch_partition(const char *statement_handle, int partition);
+
+/*
+ * Fetch the next page using a v1 Link header URL (absolute path).
+ * rowtype=NULL — reuse the original query's rowtype. Release with sf_query_free().
+ */
+SfQueryResult sf_session_fetch_page(const char *path_and_query);
 
 void sf_query_free(SfQueryResult *res);
 

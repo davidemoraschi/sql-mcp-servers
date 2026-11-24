@@ -225,7 +225,36 @@ static char *sq_build_body(const char *sql) {
     return sf_buf_take(&b);
 }
 
-/* Execute without any session handling. Fills res; SQ_REAUTH if the session died. */
+/* Parse rel="next" and rel="last" from a Link header value.
+   Fills next_url (up to next_size bytes) and sets *is_last. */
+static void sq_parse_link(const char *link, char *next_url, size_t next_size, bool *is_last) {
+    *is_last = false;
+    next_url[0] = '\0';
+    if (!link) return;
+    /* Format: <url>; rel="next", <url>; rel="last" */
+    const char *p = link;
+    while (*p) {
+        while (*p == ' ' || *p == ',') p++;
+        if (*p != '<') break;
+        p++;
+        const char *url_start = p;
+        while (*p && *p != '>') p++;
+        size_t url_len = (size_t)(p - url_start);
+        if (*p == '>') p++;
+        /* skip to rel= */
+        while (*p == ' ' || *p == ';') p++;
+        bool is_next = false, is_last_rel = false;
+        if (strncmp(p, "rel=\"next\"", 10) == 0)  { is_next = true;     p += 10; }
+        else if (strncmp(p, "rel=\"last\"", 11) == 0) { is_last_rel = true; p += 11; }
+        if (is_next && url_len > 0 && url_len < next_size) {
+            memcpy(next_url, url_start, url_len);
+            next_url[url_len] = '\0';
+        }
+        if (is_last_rel) *is_last = true;
+    }
+}
+
+
 static SqOutcome sq_execute(const char *sql, SfQueryResult *res) {
     SfHttpResponse http;
     char req_id[37], path[96];
@@ -238,7 +267,7 @@ static SqOutcome sq_execute(const char *sql, SfQueryResult *res) {
                                                                     : SF_DEFAULT_QUERY_SEC);
     SqOutcome out = SQ_FAILED;
     const JsonValue *data;
-    const JsonValue *fmt;
+    const JsonValue *fmt = NULL;
 
     memset(&http, 0, sizeof(http));
     if (!body) { sq_set_error(res, "Out of memory"); return SQ_FAILED; }
@@ -250,6 +279,11 @@ static SqOutcome sq_execute(const char *sql, SfQueryResult *res) {
         if (!sq_do_request(method, cur_path, cur_body, &http, res)) goto done;
         json_free(res->root);
         res->root = json_parse(http.body);
+        /* Capture Link header before freeing http */
+        sq_parse_link(http.link_header,
+                      res->next_page_url, sizeof(res->next_page_url),
+                      &res->is_last_page);
+        if (res->next_page_url[0]) res->more_chunks = true;
         sf_http_free_response(&http);
         if (!res->root || res->root->type != JSON_OBJECT) {
             sq_set_error(res, "Snowflake returned an unreadable response");
@@ -292,15 +326,31 @@ static SqOutcome sq_execute(const char *sql, SfQueryResult *res) {
     }
     data = json_object_get(res->root, "data");
     fmt = json_object_get(data, "queryResultFormat");
-    if (fmt && fmt->type == JSON_STRING && strcmp(fmt->u.string, "json") != 0) {
-        sq_set_error(res, "Snowflake returned the result in '%s' format; only JSON is supported", fmt->u.string);
-        goto done;
-    }
-    res->rowtype = json_object_get(data, "rowtype");
-    res->rowset = json_object_get(data, "rowset");
     {
+        /* jsonv2 (newer Snowflake): format under resultSetMetaData, rows in top-level data array,
+           columns in resultSetMetaData.rowType, partitionInfo in resultSetMetaData, handle at root.
+           v1/json (legacy): format under data.queryResultFormat, rows in data.rowset,
+           columns in data.rowtype, partitionInfo in data, handle in data. */
+        const JsonValue *rmd = json_object_get(res->root, "resultSetMetaData");
+        fmt = json_object_get(data, "queryResultFormat");
+        if (!fmt) fmt = json_object_get(rmd, "format");
+        if (fmt && fmt->type == JSON_STRING &&
+            strcmp(fmt->u.string, "json") != 0 &&
+            strcmp(fmt->u.string, "jsonv2") != 0) {
+            sq_set_error(res, "Snowflake returned the result in '%s' format; only JSON is supported", fmt->u.string);
+            goto done;
+        }
+        res->rowtype = json_object_get(data, "rowtype");
+        if (!res->rowtype) res->rowtype = json_object_get(rmd, "rowType");
+        res->rowset = json_object_get(data, "rowset");
+        if (!res->rowset && data && data->type == JSON_ARRAY) res->rowset = data;
+    }
+    {
+        const JsonValue *rmd = json_object_get(res->root, "resultSetMetaData");
         const JsonValue *pi = json_object_get(data, "partitionInfo");
+        if (!pi) pi = json_object_get(rmd, "partitionInfo");
         const JsonValue *sh = json_object_get(data, "statementHandle");
+        if (!sh) sh = json_object_get(res->root, "statementHandle");
         if (pi && pi->type == JSON_ARRAY && pi->u.array.count > 0) {
             res->more_chunks = true;
             res->partition_count = (int)pi->u.array.count + 1; /* +1 for partition 0 */
@@ -416,13 +466,39 @@ SfQueryResult sf_session_fetch_partition(const char *statement_handle, int parti
     if (!res.root || res.root->type != JSON_OBJECT) {
         sq_set_error(&res, "Unreadable partition response"); return res;
     }
-    /* Partition responses have rowset at top level or under data */
-    res.rowset = json_object_get(res.root, "rowset");
+    /* Partition responses: {"data": [[row], [row], ...]} */
+    res.rowset = json_object_get(res.root, "data");
     if (!res.rowset) {
-        const JsonValue *data = json_object_get(res.root, "data");
-        res.rowset = json_object_get(data, "rowset");
+        sq_set_error(&res, "No data in partition response"); return res;
     }
-    if (!res.rowset) { sq_set_error(&res, "No rowset in partition response"); return res; }
+    res.success = true;
+    return res;
+}
+
+SfQueryResult sf_session_fetch_page(const char *path_and_query) {
+    SfQueryResult res;
+    SfHttpResponse http;
+    memset(&res, 0, sizeof(res));
+    memset(&http, 0, sizeof(http));
+    if (!g.token) { sq_set_error(&res, "No active session"); return res; }
+    if (!path_and_query || path_and_query[0] != '/') {
+        sq_set_error(&res, "Invalid page URL"); return res;
+    }
+    if (!sq_do_request("GET", path_and_query, NULL, &http, &res)) return res;
+    sq_parse_link(http.link_header,
+                  res.next_page_url, sizeof(res.next_page_url),
+                  &res.is_last_page);
+    res.root = json_parse(http.body);
+    sf_http_free_response(&http);
+    if (!res.root || res.root->type != JSON_OBJECT) {
+        sq_set_error(&res, "Unreadable page response"); return res;
+    }
+    /* v1 page response: same envelope as initial query */
+    const JsonValue *data = json_object_get(res.root, "data");
+    res.rowset = json_object_get(data, "rowset");
+    if (!res.rowset && data && data->type == JSON_ARRAY) res.rowset = data;
+    if (!res.rowset) { sq_set_error(&res, "No rowset in page response"); return res; }
+    res.more_chunks = (res.next_page_url[0] != '\0');
     res.success = true;
     return res;
 }

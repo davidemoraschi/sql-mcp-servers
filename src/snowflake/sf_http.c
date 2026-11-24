@@ -12,7 +12,7 @@
 #include <string.h>
 #include "sf_http.h"
 
-#define SF_HTTP_MAX_RESPONSE (4u * 1024u * 1024u)
+#define SF_HTTP_MAX_RESPONSE (64u * 1024u * 1024u)
 
 static char *sf_http_dup(const char *s) {
     size_t n = strlen(s) + 1;
@@ -25,8 +25,10 @@ void sf_http_free_response(SfHttpResponse *resp) {
     if (!resp) return;
     free(resp->body);
     free(resp->error);
+    free(resp->link_header);
     resp->body = NULL;
     resp->error = NULL;
+    resp->link_header = NULL;
     resp->body_len = 0;
     resp->status = 0;
 }
@@ -149,6 +151,20 @@ bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
         goto done;
     }
     resp->status = (int)status;
+    {
+        /* Capture Link header for v1 pagination */
+        wchar_t lbuf[2048]; DWORD lsz = sizeof(lbuf);
+        if (WinHttpQueryHeaders(req, WINHTTP_QUERY_CUSTOM, L"Link",
+                                lbuf, &lsz, WINHTTP_NO_HEADER_INDEX)) {
+            int n = WideCharToMultiByte(CP_UTF8, 0, lbuf, -1, NULL, 0, NULL, NULL);
+            if (n > 0) {
+                char *mb = (char *)malloc((size_t)n);
+                if (mb && WideCharToMultiByte(CP_UTF8, 0, lbuf, -1, mb, n, NULL, NULL) > 0)
+                    resp->link_header = mb;
+                else free(mb);
+            }
+        }
+    }
     if (!sf_win_read_body(req, resp)) {
         sf_win_error(resp, "Reading response body failed");
         goto done;
@@ -195,6 +211,22 @@ static size_t sf_curl_write(char *ptr, size_t size, size_t nmemb, void *ud) {
     return n;
 }
 
+static size_t sf_curl_header(char *buf, size_t size, size_t nitems, void *ud) {
+    SfCurlBuf *b = (SfCurlBuf *)ud;
+    size_t n = size * nitems;
+    /* Look for "Link:" header (case-insensitive prefix) */
+    if (n > 5 && strncasecmp(buf, "link:", 5) == 0) {
+        const char *val = buf + 5;
+        while (*val == ' ') val++;
+        size_t vlen = n - (size_t)(val - buf);
+        while (vlen > 0 && (val[vlen-1] == '\r' || val[vlen-1] == '\n')) vlen--;
+        free(b->data);
+        b->data = (char *)malloc(vlen + 1);
+        if (b->data) { memcpy(b->data, val, vlen); b->data[vlen] = '\0'; b->len = vlen; }
+    }
+    return n;
+}
+
 bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
     static int curl_ready = 0;
     const char *host = rq->host;
@@ -205,6 +237,7 @@ bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
     CURL *curl;
     struct curl_slist *hdrs = NULL;
     SfCurlBuf buf = {NULL, 0, 0};
+    SfCurlBuf lnk = {NULL, 0, 0}; /* Link header capture */
     char errbuf[CURL_ERROR_SIZE];
     char *url;
     size_t url_len;
@@ -253,6 +286,8 @@ bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
     curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, sf_curl_write);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &buf);
+    curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, sf_curl_header);
+    curl_easy_setopt(curl, CURLOPT_HEADERDATA, &lnk);
 
     rc = curl_easy_perform(curl);
     if (rc == CURLE_OK) {
@@ -260,6 +295,7 @@ bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
         resp->status = (int)code;
         resp->body = buf.data ? buf.data : sf_http_dup("");
         resp->body_len = buf.len;
+        resp->link_header = lnk.data; lnk.data = NULL;
     } else {
         char msg[CURL_ERROR_SIZE + 64];
         snprintf(msg, sizeof(msg), "HTTPS request failed: %s",
@@ -270,6 +306,7 @@ bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
     curl_slist_free_all(hdrs);
     curl_easy_cleanup(curl);
     free(url);
+    free(lnk.data);
     return rc == CURLE_OK;
 }
 
