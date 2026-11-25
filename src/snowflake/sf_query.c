@@ -475,6 +475,57 @@ SfQueryResult sf_session_fetch_partition(const char *statement_handle, int parti
     return res;
 }
 
+SfQueryResult sf_session_fetch_chunk(const char *url, const JsonValue *chunk_headers) {
+    SfQueryResult res;
+    SfHttpResponse http;
+    SfBuf headers = {NULL, 0, 0, false}, endpoint = {NULL, 0, 0, false}, body = {NULL, 0, 0, false};
+    const char *end;
+    memset(&res, 0, sizeof(res));
+    memset(&http, 0, sizeof(http));
+    if (!url || !*url) {
+        sq_set_error(&res, "Invalid Snowflake result chunk URL"); return res;
+    }
+    if (url[0] == '/') {
+        sf_buf_printf(&endpoint, "https://%s%s", g.host, url);
+        url = endpoint.p;
+    }
+    if (!url || (strncmp(url, "https://", 8) != 0 && strncmp(url, "http://", 7) != 0)) {
+        sf_buf_free(&endpoint);
+        sq_set_error(&res, "Invalid Snowflake result chunk URL"); return res;
+    }
+    if (chunk_headers && chunk_headers->type == JSON_OBJECT) {
+        for (size_t i = 0; i < chunk_headers->u.object.count; i++) {
+            const char *name = chunk_headers->u.object.keys[i];
+            const char *value = json_string_value(chunk_headers->u.object.values[i]);
+            if (name && value) sf_buf_printf(&headers, "%s: %s\r\n", name, value);
+        }
+    }
+    if (headers.oom || !sf_http_get_url(url, headers.p, true, SF_REQ_TIMEOUT_MS, &http)) {
+        sq_set_error(&res, "Snowflake result chunk request failed: %s", http.error ? http.error : "transport error");
+        sf_http_free_response(&http); sf_buf_free(&headers); sf_buf_free(&endpoint); return res;
+    }
+    sf_buf_free(&headers); sf_buf_free(&endpoint);
+    if (http.status < 200 || http.status >= 300) {
+        sq_set_error(&res, "Snowflake result chunk returned HTTP status %d", http.status);
+        sf_http_free_response(&http); return res;
+    }
+    /* Session chunks are comma-separated row arrays, not a complete JSON array. */
+    end = http.body ? http.body + strlen(http.body) : NULL;
+    while (end && end > http.body && (isspace((unsigned char)end[-1]) || end[-1] == ',')) end--;
+    sf_buf_str(&body, "[");
+    if (end) sf_buf_add(&body, http.body, (size_t)(end - http.body));
+    sf_buf_str(&body, "]");
+    sf_http_free_response(&http);
+    res.root = json_parse(body.p ? body.p : "[]");
+    sf_buf_free(&body);
+    if (!res.root || res.root->type != JSON_ARRAY) {
+        sq_set_error(&res, "Unreadable Snowflake result chunk"); return res;
+    }
+    res.rowset = res.root;
+    res.success = true;
+    return res;
+}
+
 SfQueryResult sf_session_fetch_page(const char *path_and_query) {
     SfQueryResult res;
     SfHttpResponse http;

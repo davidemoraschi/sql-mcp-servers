@@ -21,8 +21,6 @@
 #include "db_snowflake_internal.h"
 #include "sf_buf.h"
 
-#define SF_MAX_RESULT_ROWS 1000
-
 /* Shared state accessed by db_snowflake_transfer.c */
 bool g_ready     = false;
 bool g_read_only = false;
@@ -156,7 +154,7 @@ size_t sf_col_count(const SfQueryResult *q) {
 DbQueryResult sf_format_result(const SfQueryResult *q) {
     DbQueryResult res; memset(&res, 0, sizeof(res));
     SfBuf md = {NULL,0,0,false}, js = {NULL,0,0,false};
-    size_t cols = sf_col_count(q), rows = sf_row_count(q), shown = rows < SF_MAX_RESULT_ROWS ? rows : SF_MAX_RESULT_ROWS;
+    size_t cols = sf_col_count(q), rows = sf_row_count(q), shown = rows;
     char num[40];
 
     sf_buf_str(&md, "|");
@@ -214,12 +212,12 @@ DbQueryResult sf_run(const char *sql) {
     for (size_t c = 0; c < cols; c++) sf_buf_str(&md, "---|");
     sf_buf_str(&js, "[");
 
-    /* Helper: append one rowset up to the cap */
+    /* Append every row in a result partition. */
     #define APPEND_ROWSET(rowset_ptr) do { \
         const JsonValue *_rs = (rowset_ptr); \
         if (_rs && _rs->type == JSON_ARRAY) { \
             size_t _rows = _rs->u.array.count; \
-            for (size_t _r = 0; _r < _rows && shown < SF_MAX_RESULT_ROWS; _r++, shown++) { \
+            for (size_t _r = 0; _r < _rows; _r++, shown++) { \
                 bool _null; const char *_t; \
                 const JsonValue *_row = _rs->u.array.items[_r]; \
                 if (!_row || _row->type != JSON_ARRAY) continue; \
@@ -239,39 +237,63 @@ DbQueryResult sf_run(const char *sql) {
 
     APPEND_ROWSET(q.rowset);
 
-    if (q.more_chunks && shown < SF_MAX_RESULT_ROWS) {
+    if (q.more_chunks) {
         if (q.next_page_url[0]) {
             /* v1 Link pagination */
             char cur_url[512];
             snprintf(cur_url, sizeof(cur_url), "%s", q.next_page_url);
-            while (cur_url[0] && shown < SF_MAX_RESULT_ROWS) {
+            while (cur_url[0]) {
                 SfQueryResult pq = sf_session_fetch_page(cur_url);
-                if (!pq.success) { sf_query_free(&pq); break; }
-                long before = shown;
+                if (!pq.success) {
+                    res.error_message = sf_safe_strdup(pq.error_message ? pq.error_message : "Failed to fetch Snowflake result page");
+                    sf_query_free(&pq); sf_query_free(&q);
+                    sf_buf_free(&md); sf_buf_free(&js);
+                    return res;
+                }
                 APPEND_ROWSET(pq.rowset);
                 snprintf(cur_url, sizeof(cur_url), "%s", pq.next_page_url);
                 bool last = pq.is_last_page;
                 sf_query_free(&pq);
-                if (shown == before || last) break;
+                if (last) break;
             }
-        } else if (q.statement_handle[0]) {
+        } else {
+            const JsonValue *data = json_object_get(q.root, "data");
+            const JsonValue *chunks = json_object_get(data, "chunks");
+            const JsonValue *chunk_headers = json_object_get(data, "chunkHeaders");
+            if (chunks && chunks->type == JSON_ARRAY) {
+                /* Session API: remaining rows live at signed chunk URLs. */
+                for (size_t i = 0; i < chunks->u.array.count; i++) {
+                    const JsonValue *chunk = chunks->u.array.items[i];
+                    const char *url = json_string_value(json_object_get(chunk, "url"));
+                    SfQueryResult pq = sf_session_fetch_chunk(url, chunk_headers);
+                    if (!pq.success) {
+                        res.error_message = sf_safe_strdup(pq.error_message ? pq.error_message : "Failed to fetch Snowflake result chunk");
+                        sf_query_free(&pq); sf_query_free(&q);
+                        sf_buf_free(&md); sf_buf_free(&js);
+                        return res;
+                    }
+                    APPEND_ROWSET(pq.rowset);
+                    sf_query_free(&pq);
+                }
+            } else if (q.statement_handle[0]) {
             /* v2 partition pagination */
-            for (int p = 1; (q.partition_count == 0 || p < q.partition_count) && shown < SF_MAX_RESULT_ROWS; p++) {
+            for (int p = 1; (q.partition_count == 0 || p < q.partition_count); p++) {
                 SfQueryResult pq = sf_session_fetch_partition(q.statement_handle, p);
-                if (!pq.success) { sf_query_free(&pq); break; }
-                long before = shown;
+                if (!pq.success) {
+                    res.error_message = sf_safe_strdup(pq.error_message ? pq.error_message : "Failed to fetch Snowflake result partition");
+                    sf_query_free(&pq); sf_query_free(&q);
+                    sf_buf_free(&md); sf_buf_free(&js);
+                    return res;
+                }
                 APPEND_ROWSET(pq.rowset);
                 sf_query_free(&pq);
-                if (shown == before) break;
+            }
             }
         }
     }
     #undef APPEND_ROWSET
 
     sf_buf_str(&js, "]");
-    if (q.more_chunks)
-        sf_buf_printf(&md, "\n\n(Result truncated: showing %ld of 1000+ rows.)", shown);
-
     sf_query_free(&q);
     res.markdown_table = sf_buf_take(&md); res.json_structured = sf_buf_take(&js);
     if (!res.markdown_table || !res.json_structured) {

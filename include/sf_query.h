@@ -52,6 +52,9 @@ SfQueryResult sf_session_query(const char *sql);
  */
 SfQueryResult sf_session_fetch_partition(const char *statement_handle, int partition);
 
+/* Fetch one session-API chunk URL. The chunk headers belong to the initial result. */
+SfQueryResult sf_session_fetch_chunk(const char *url, const JsonValue *chunk_headers);
+
 /*
  * Fetch the next page using a v1 Link header URL (absolute path).
  * rowtype=NULL — reuse the original query's rowtype. Release with sf_query_free().
