@@ -1,0 +1,1 @@
+echo {"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"export_data","arguments":{"target":"SELECT INTERACTION, INTERACTIONTYPE FROM SAP_MARKETING_CLOUD.PUBLIC.EXT_SAPMKT_INTERACTIONS LIMIT 10","destination_path":"C:/temp/test_export.csv","format":"csv"}}} | "C:\sources\sql-mcp-servers\out\build\x64-release\snowflake-mcp-server.exe" 2>"C:\temp\mcp_stderr.txt"
