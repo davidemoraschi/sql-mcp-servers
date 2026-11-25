@@ -42,6 +42,10 @@ bool sf_http_post_json(const char *host, const char *path_and_query,
                        const char *json_body, int timeout_ms,
                        SfHttpResponse *resp);
 
+/* Fetch an absolute HTTPS URL. extra_headers is a CRLF-delimited header block. */
+bool sf_http_get_url(const char *url, const char *extra_headers, bool decompress,
+                     int timeout_ms, SfHttpResponse *resp);
+
 void sf_http_free_response(SfHttpResponse *resp);
 
 #endif /* SF_HTTP_H */

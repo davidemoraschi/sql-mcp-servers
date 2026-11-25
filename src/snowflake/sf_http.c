@@ -324,3 +324,92 @@ bool sf_http_post_json(const char *host, const char *path_and_query,
     rq.timeout_ms = timeout_ms;
     return sf_http_request(&rq, resp);
 }
+
+bool sf_http_get_url(const char *url, const char *extra_headers, bool decompress,
+                     int timeout_ms, SfHttpResponse *resp) {
+#ifdef _WIN32
+    URL_COMPONENTS parts;
+    wchar_t *wurl = NULL, *wheaders = NULL;
+    HINTERNET ses = NULL, con = NULL, req = NULL;
+    wchar_t host[512], path[4096];
+    DWORD status = 0, status_sz = sizeof(status);
+    bool ok = false;
+
+    memset(resp, 0, sizeof(*resp));
+    memset(&parts, 0, sizeof(parts));
+    memset(host, 0, sizeof(host)); memset(path, 0, sizeof(path));
+    parts.dwStructSize = sizeof(parts);
+    parts.lpszHostName = host; parts.dwHostNameLength = (DWORD)(sizeof(host) / sizeof(host[0]));
+    wurl = sf_to_wide(url);
+    wheaders = sf_to_wide(extra_headers ? extra_headers : "");
+    if (!wurl || !wheaders || !WinHttpCrackUrl(wurl, 0, 0, &parts)) {
+        resp->error = sf_http_dup("Invalid chunk URL"); goto done;
+    }
+    /* Keep only the host/port from WinHttpCrackUrl; retain the complete request
+       target, including the signed query string, from the original URL. */
+    {
+        const wchar_t *slash = wcschr(wurl, L'/');
+        slash = slash ? wcschr(slash + 2, L'/') : NULL;
+        if (!slash) slash = L"/";
+        wcsncpy(path, slash, (sizeof(path) / sizeof(path[0])) - 1);
+    }
+    ses = WinHttpOpen(L"snowflake-mcp-server/1.0", WINHTTP_ACCESS_TYPE_AUTOMATIC_PROXY,
+                      WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
+    if (!ses) { sf_win_error(resp, "WinHttpOpen failed"); goto done; }
+    WinHttpSetTimeouts(ses, timeout_ms, timeout_ms, timeout_ms, timeout_ms);
+    con = WinHttpConnect(ses, host, parts.nPort, 0);
+    if (!con) { sf_win_error(resp, "WinHttpConnect failed"); goto done; }
+    req = WinHttpOpenRequest(con, L"GET", path, NULL, WINHTTP_NO_REFERER,
+                             WINHTTP_DEFAULT_ACCEPT_TYPES,
+                             parts.nScheme == INTERNET_SCHEME_HTTPS ? WINHTTP_FLAG_SECURE : 0);
+    if (!req) { sf_win_error(resp, "WinHttpOpenRequest failed"); goto done; }
+    if (decompress) {
+        DWORD flags = WINHTTP_DECOMPRESSION_FLAG_GZIP | WINHTTP_DECOMPRESSION_FLAG_DEFLATE;
+        WinHttpSetOption(req, WINHTTP_OPTION_DECOMPRESSION, &flags, sizeof(flags));
+    }
+    if (!WinHttpSendRequest(req, wheaders, (DWORD)-1L, NULL, 0, 0, 0)) {
+        sf_win_error(resp, "WinHttpSendRequest failed"); goto done;
+    }
+    if (!WinHttpReceiveResponse(req, NULL)) { sf_win_error(resp, "WinHttpReceiveResponse failed"); goto done; }
+    if (!WinHttpQueryHeaders(req, WINHTTP_QUERY_STATUS_CODE | WINHTTP_QUERY_FLAG_NUMBER,
+                             WINHTTP_HEADER_NAME_BY_INDEX, &status, &status_sz, WINHTTP_NO_HEADER_INDEX)) {
+        sf_win_error(resp, "Reading HTTP status failed"); goto done;
+    }
+    resp->status = (int)status;
+    if (!sf_win_read_body(req, resp)) { sf_win_error(resp, "Reading response body failed"); goto done; }
+    ok = true;
+done:
+    if (req) WinHttpCloseHandle(req); if (con) WinHttpCloseHandle(con); if (ses) WinHttpCloseHandle(ses);
+    free(wurl); free(wheaders);
+    return ok;
+#else
+    static int curl_ready = 0;
+    CURL *curl = NULL; struct curl_slist *hdrs = NULL; SfCurlBuf body = {NULL, 0, 0};
+    char errbuf[CURL_ERROR_SIZE]; CURLcode rc; long code = 0;
+    const char *p;
+    memset(resp, 0, sizeof(*resp)); errbuf[0] = '\0';
+    if (!curl_ready && curl_global_init(CURL_GLOBAL_DEFAULT) != CURLE_OK) {
+        resp->error = sf_http_dup("curl_global_init failed"); return false;
+    }
+    curl_ready = 1; curl = curl_easy_init();
+    if (!curl) { resp->error = sf_http_dup("Out of memory"); return false; }
+    for (p = extra_headers ? extra_headers : ""; *p;) {
+        const char *e = strstr(p, "\r\n"); size_t n = e ? (size_t)(e - p) : strlen(p);
+        char *h = (char *)malloc(n + 1);
+        if (!h) break;
+        memcpy(h, p, n); h[n] = '\0'; if (n) hdrs = curl_slist_append(hdrs, h); free(h);
+        p = e ? e + 2 : p + n;
+    }
+    curl_easy_setopt(curl, CURLOPT_URL, url); curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, hdrs); curl_easy_setopt(curl, CURLOPT_TIMEOUT_MS, (long)timeout_ms);
+    curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT_MS, (long)timeout_ms); curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
+    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L); curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+    curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L); curl_easy_setopt(curl, CURLOPT_ERRORBUFFER, errbuf);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, sf_curl_write); curl_easy_setopt(curl, CURLOPT_WRITEDATA, &body);
+    if (decompress) curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
+    rc = curl_easy_perform(curl);
+    if (rc == CURLE_OK) { curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &code); resp->status = (int)code; resp->body = body.data ? body.data : sf_http_dup(""); resp->body_len = body.len; }
+    else { char msg[CURL_ERROR_SIZE + 64]; snprintf(msg, sizeof(msg), "HTTPS request failed: %s", errbuf[0] ? errbuf : curl_easy_strerror(rc)); resp->error = sf_http_dup(msg); free(body.data); }
+    curl_slist_free_all(hdrs); curl_easy_cleanup(curl); return rc == CURLE_OK;
+#endif
+}
