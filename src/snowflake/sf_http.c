@@ -10,6 +10,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
+  #include <strings.h> /* strncasecmp */
+#endif
 #include "sf_http.h"
 
 #define SF_HTTP_MAX_RESPONSE (64u * 1024u * 1024u)
