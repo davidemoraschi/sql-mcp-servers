@@ -32,6 +32,14 @@ add_executable(mcp_test_runner_postgres src/postgres/test_runner_postgres.c)
 
 set(MCP_TARGETS sqlite-mcp-server mcp_test_runner_sqlite mcp_test_runner_postgres)
 
+# Embed the application icon in every Windows executable.
+if(WIN32)
+    set(MCP_WINDOWS_ICON res/app.rc)
+    target_sources(sqlite-mcp-server PRIVATE ${MCP_WINDOWS_ICON})
+    target_sources(mcp_test_runner_sqlite PRIVATE ${MCP_WINDOWS_ICON})
+    target_sources(mcp_test_runner_postgres PRIVATE ${MCP_WINDOWS_ICON})
+endif()
+
 # ---------------------------------------------------------------------------
 # Snowflake MCP Server (optional: needs WinHTTP on Windows, libcurl elsewhere)
 # ---------------------------------------------------------------------------
@@ -65,6 +73,9 @@ if(BUILD_SNOWFLAKE)
         target_link_libraries(snowflake-mcp-server PRIVATE CURL::libcurl)
     endif()
     list(APPEND MCP_TARGETS snowflake-mcp-server)
+    if(WIN32)
+        target_sources(snowflake-mcp-server PRIVATE ${MCP_WINDOWS_ICON})
+    endif()
 endif()
 
 # ---------------------------------------------------------------------------
@@ -85,11 +96,17 @@ if(WIN32)
     target_link_libraries(postgres-mcp-server PRIVATE ws2_32)
 endif()
 list(APPEND MCP_TARGETS postgres-mcp-server)
+if(WIN32)
+    target_sources(postgres-mcp-server PRIVATE ${MCP_WINDOWS_ICON})
+endif()
 
 # ---------------------------------------------------------------------------
 # Compiler flags (applied to all targets)
 # ---------------------------------------------------------------------------
 foreach(tgt IN LISTS MCP_TARGETS)
+    if(WIN32)
+        target_include_directories(${tgt} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/res")
+    endif()
     if(MSVC)
         target_compile_options(${tgt} PRIVATE
             /W3
