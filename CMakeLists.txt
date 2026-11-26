@@ -29,8 +29,9 @@ add_executable(sqlite-mcp-server
 # ---------------------------------------------------------------------------
 add_executable(mcp_test_runner_sqlite src/sqlite/test_runner_sqlite.c)
 add_executable(mcp_test_runner_postgres src/postgres/test_runner_postgres.c)
+add_executable(mcp_test_runner_athena src/athena/test_runner_athena.c src/athena/aws_sha256.c)
 
-set(MCP_TARGETS sqlite-mcp-server mcp_test_runner_sqlite mcp_test_runner_postgres)
+set(MCP_TARGETS sqlite-mcp-server mcp_test_runner_sqlite mcp_test_runner_postgres mcp_test_runner_athena)
 
 # Embed the application icon and version information in every Windows executable.
 if(WIN32)
@@ -110,6 +111,42 @@ if(BUILD_BIGQUERY)
         target_link_libraries(bigquery-mcp-server PRIVATE CURL::libcurl)
     endif()
     list(APPEND MCP_TARGETS bigquery-mcp-server)
+endif()
+
+# ---------------------------------------------------------------------------
+# AWS Athena MCP Server (SigV4 + AWS JSON API, no AWS SDK)
+# ---------------------------------------------------------------------------
+set(BUILD_ATHENA ON)
+if(NOT WIN32 AND NOT CURL_FOUND)
+    find_package(CURL)
+    if(NOT CURL_FOUND)
+        message(WARNING "libcurl not found: skipping athena-mcp-server")
+        set(BUILD_ATHENA OFF)
+    endif()
+endif()
+if(BUILD_ATHENA)
+    add_executable(athena-mcp-server
+        src/athena/main_athena.c
+        src/athena/aws_sha256.c
+        src/athena/aws_credentials.c
+        src/athena/aws_sso.c
+        src/athena/aws_sigv4.c
+        src/athena/db_athena.c
+        src/athena/db_athena_schema.c
+        src/athena/db_athena_transfer.c
+        src/shared/mcp_loop.c
+        src/shared/json_rpc.c
+        src/shared/rdbms_tools.c
+        src/snowflake/sf_buf.c
+        src/snowflake/sf_http.c
+    )
+    if(WIN32)
+        target_link_libraries(athena-mcp-server PRIVATE winhttp shell32)
+        target_sources(athena-mcp-server PRIVATE res/athena.rc)
+    else()
+        target_link_libraries(athena-mcp-server PRIVATE CURL::libcurl)
+    endif()
+    list(APPEND MCP_TARGETS athena-mcp-server)
 endif()
 
 # ---------------------------------------------------------------------------

@@ -107,7 +107,6 @@ bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
                       (rq->content_type ? strlen(rq->content_type) : 24) + 96;
     size_t body_len = (!is_get && json_body) ? strlen(json_body) : 0;
     DWORD status = 0, status_sz = sizeof(status);
-    DWORD protos = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
     bool ok = false;
 
     memset(resp, 0, sizeof(*resp));
@@ -121,10 +120,6 @@ bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
     ses = WinHttpOpen(L"sf-auth-c/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,
                       WINHTTP_NO_PROXY_NAME, WINHTTP_NO_PROXY_BYPASS, 0);
     if (!ses) { sf_win_error(resp, "WinHttpOpen failed"); goto done; }
-#ifdef WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3
-    protos |= WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_3;
-#endif
-    WinHttpSetOption(ses, WINHTTP_OPTION_SECURE_PROTOCOLS, &protos, sizeof(protos));
     WinHttpSetTimeouts(ses, timeout_ms, timeout_ms, timeout_ms, timeout_ms);
 
     con = WinHttpConnect(ses, whost, INTERNET_DEFAULT_HTTPS_PORT, 0);
@@ -138,8 +133,12 @@ bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
         DWORD redirect = WINHTTP_OPTION_REDIRECT_POLICY_NEVER;
         WinHttpSetOption(req, WINHTTP_OPTION_REDIRECT_POLICY, &redirect, sizeof(redirect));
     }
+    if (!WinHttpAddRequestHeaders(req, wheaders, (DWORD)-1L,
+            WINHTTP_ADDREQ_FLAG_ADD | WINHTTP_ADDREQ_FLAG_REPLACE)) {
+        sf_win_error(resp, "Adding request headers failed"); goto done;
+    }
 
-    if (!WinHttpSendRequest(req, wheaders, (DWORD)-1L,
+    if (!WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0,
                             body_len ? (LPVOID)json_body : NULL,
                             (DWORD)body_len, (DWORD)body_len, 0)) {
         sf_win_error(resp, "WinHttpSendRequest failed");
@@ -276,7 +275,16 @@ bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
         hdrs = curl_slist_append(hdrs, content_type);
     }
     hdrs = curl_slist_append(hdrs, "Accept: application/json");
-    if (rq->auth_header) hdrs = curl_slist_append(hdrs, rq->auth_header);
+    if (rq->auth_header) {
+        const char *p = rq->auth_header;
+        while (*p) {
+            const char *e = strstr(p, "\r\n"); size_t n = e ? (size_t)(e - p) : strlen(p);
+            char *line = (char *)malloc(n + 1);
+            if (!line) break;
+            memcpy(line, p, n); line[n] = '\0'; if (n) hdrs = curl_slist_append(hdrs, line); free(line);
+            p = e ? e + 2 : p + n;
+        }
+    }
     curl_easy_setopt(curl, CURLOPT_URL, url);
     if (is_get) {
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
@@ -378,7 +386,11 @@ bool sf_http_get_url(const char *url, const char *extra_headers, bool decompress
         DWORD flags = WINHTTP_DECOMPRESSION_FLAG_GZIP | WINHTTP_DECOMPRESSION_FLAG_DEFLATE;
         WinHttpSetOption(req, WINHTTP_OPTION_DECOMPRESSION, &flags, sizeof(flags));
     }
-    if (!WinHttpSendRequest(req, wheaders, (DWORD)-1L, NULL, 0, 0, 0)) {
+    if (!WinHttpAddRequestHeaders(req, wheaders, (DWORD)-1L,
+            WINHTTP_ADDREQ_FLAG_ADD | WINHTTP_ADDREQ_FLAG_REPLACE)) {
+        sf_win_error(resp, "Adding request headers failed"); goto done;
+    }
+    if (!WinHttpSendRequest(req, WINHTTP_NO_ADDITIONAL_HEADERS, 0, NULL, 0, 0, 0)) {
         sf_win_error(resp, "WinHttpSendRequest failed"); goto done;
     }
     if (!WinHttpReceiveResponse(req, NULL)) { sf_win_error(resp, "WinHttpReceiveResponse failed"); goto done; }

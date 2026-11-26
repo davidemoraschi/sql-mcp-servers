@@ -194,3 +194,45 @@ Linux builds require libcurl, like the Snowflake server. Windows uses WinHTTP fr
   }
 }
 ```
+
+---
+
+## AWS Athena MCP Server (`athena-mcp-server`)
+
+Uses the Athena HTTPS JSON API directly with ANSI C implementations of AWS Signature Version 4 and IAM Identity Center device authorization. It does not use the AWS SDK or the AWS CLI. Credentials are resolved from `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / optional `AWS_SESSION_TOKEN`, then from the selected shared AWS profile. Static, temporary, and `sso-session` profiles are supported. A valid token in the standard AWS SSO cache is reused; otherwise the server opens the browser to authorize the configured account and role.
+
+| Variable | Default | Description |
+|---|---|---|
+| `ATHENA_REGION` | `AWS_REGION`, then `AWS_DEFAULT_REGION` | AWS region containing the Athena workgroup. One of these variables is required. |
+| `ATHENA_DATABASE` | `default` | Default Glue Data Catalog database. |
+| `ATHENA_CATALOG` | `AwsDataCatalog` | Athena data catalog. |
+| `ATHENA_WORKGROUP` | `primary` | Athena workgroup used for queries. |
+| `ATHENA_OUTPUT_LOCATION` | workgroup setting | S3 URI for query results, such as `s3://bucket/athena-results/`. Required when the workgroup does not enforce an output location. |
+| `ATHENA_ACCESS_MODE` | `READWRITE` | `READONLY` disables `write_query`. IAM remains the authoritative access control. |
+| `ATHENA_TIMEOUT_SECONDS` | `300` | Maximum time to wait for an Athena query. |
+| `AWS_PROFILE` | `default` | Shared-credentials profile used when environment credentials are absent. |
+| `AWS_ACCESS_KEY_ID` | none | IAM access key ID. |
+| `AWS_SECRET_ACCESS_KEY` | none | IAM secret access key. |
+| `AWS_SESSION_TOKEN` | none | Session token for temporary credentials. |
+| `AWS_SHARED_CREDENTIALS_FILE` | standard AWS path | Optional credentials-file override. |
+| `AWS_CONFIG_FILE` | standard AWS path | Optional AWS config-file override; static credentials in profile sections are supported. |
+
+The IAM identity needs Athena query permissions, Glue catalog read permissions, and access to the configured S3 query-results location. The common query, explain, schema, relationship, ERD, list, export, import, and health tools are exposed. Athena does not expose relational key constraints, cannot back up a database, and cannot directly import a local file; those operations return explicit guidance. Export supports JSON, CSV, and TSV without compression.
+
+```json
+{
+  "mcpServers": {
+    "athena": {
+      "command": "/path/to/athena-mcp-server",
+      "env": {
+        "ATHENA_REGION": "eu-west-1",
+        "ATHENA_DATABASE": "analytics",
+        "ATHENA_WORKGROUP": "primary",
+        "ATHENA_OUTPUT_LOCATION": "s3://my-query-results/athena/",
+        "ATHENA_ACCESS_MODE": "READONLY",
+        "AWS_PROFILE": "default"
+      }
+    }
+  }
+}
+```

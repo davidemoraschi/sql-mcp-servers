@@ -21,6 +21,8 @@ rc.exe /nologo /i res /fo bin\test_runner_postgres.res res\test_runner_postgres.
 if %ERRORLEVEL% NEQ 0 exit /b 1
 rc.exe /nologo /i res /fo bin\bigquery.res res\bigquery.rc
 if %ERRORLEVEL% NEQ 0 exit /b 1
+rc.exe /nologo /i res /fo bin\athena.res res\athena.rc
+if %ERRORLEVEL% NEQ 0 exit /b 1
 
 cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /DNDEBUG /DSQLITE_THREADSAFE=0 /DSQLITE_OMIT_LOAD_EXTENSION /DHAS_EMBEDDED_SQLITE /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude ^
     src\\sqlite\\main.c src\\shared\\mcp_loop.c src\\shared\\json_rpc.c src\\shared\\rdbms_tools.c ^
@@ -60,6 +62,17 @@ cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /
     /link /LTCG /OPT:REF /OPT:ICF bin\bigquery.res winhttp.lib ws2_32.lib shell32.lib bcrypt.lib /OUT:bin\bigquery-mcp-server.exe
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] BigQuery server compilation failed.
+    exit /b 1
+)
+
+echo [INFO] Compiling AWS Athena MCP Server...
+cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude ^
+    src\athena\main_athena.c src\athena\aws_sha256.c src\athena\aws_credentials.c src\athena\aws_sso.c src\athena\aws_sigv4.c ^
+    src\athena\db_athena.c src\athena\db_athena_schema.c src\athena\db_athena_transfer.c ^
+    src\shared\mcp_loop.c src\shared\json_rpc.c src\shared\rdbms_tools.c src\snowflake\sf_buf.c src\snowflake\sf_http.c ^
+    /link /LTCG /OPT:REF /OPT:ICF bin\athena.res winhttp.lib shell32.lib /OUT:bin\athena-mcp-server.exe
+if %ERRORLEVEL% NEQ 0 (
+    echo [ERROR] AWS Athena server compilation failed.
     exit /b 1
 )
 

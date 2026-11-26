@@ -1,0 +1,4 @@
+#define PRODUCT_DESCRIPTION "AWS Athena MCP server"
+#define EXECUTABLE_NAME "athena-mcp-server.exe"
+#define INTERNAL_NAME "athena-mcp-server"
+#include "app.rc"
