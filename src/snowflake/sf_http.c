@@ -103,7 +103,8 @@ bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
     wchar_t *wpath = sf_to_wide(rq->path_and_query);
     wchar_t *wheaders = NULL;
     char *hdr = NULL;
-    size_t hdr_size = (rq->auth_header ? strlen(rq->auth_header) : 0) + 96;
+    size_t hdr_size = (rq->auth_header ? strlen(rq->auth_header) : 0) +
+                      (rq->content_type ? strlen(rq->content_type) : 24) + 96;
     size_t body_len = (!is_get && json_body) ? strlen(json_body) : 0;
     DWORD status = 0, status_sz = sizeof(status);
     DWORD protos = WINHTTP_FLAG_SECURE_PROTOCOL_TLS1_2;
@@ -111,7 +112,8 @@ bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
 
     memset(resp, 0, sizeof(*resp));
     hdr = (char *)malloc(hdr_size);
-    if (hdr) snprintf(hdr, hdr_size, "Content-Type: application/json\r\nAccept: application/json\r\n%s%s",
+    if (hdr) snprintf(hdr, hdr_size, "Content-Type: %s\r\nAccept: application/json\r\n%s%s",
+             rq->content_type ? rq->content_type : "application/json",
              rq->auth_header ? rq->auth_header : "", rq->auth_header ? "\r\n" : "");
     wheaders = hdr ? sf_to_wide(hdr) : NULL;
     if (!whost || !wpath || !wheaders) { resp->error = sf_http_dup("Out of memory"); goto done; }
@@ -267,7 +269,12 @@ bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
     }
     snprintf(url, url_len, "https://%s%s", host, path_and_query);
 
-    hdrs = curl_slist_append(hdrs, "Content-Type: application/json");
+    {
+        char content_type[256];
+        snprintf(content_type, sizeof(content_type), "Content-Type: %s",
+                 rq->content_type ? rq->content_type : "application/json");
+        hdrs = curl_slist_append(hdrs, content_type);
+    }
     hdrs = curl_slist_append(hdrs, "Accept: application/json");
     if (rq->auth_header) hdrs = curl_slist_append(hdrs, rq->auth_header);
     curl_easy_setopt(curl, CURLOPT_URL, url);
@@ -323,6 +330,7 @@ bool sf_http_post_json(const char *host, const char *path_and_query,
     rq.host = host;
     rq.path_and_query = path_and_query;
     rq.json_body = json_body;
+    rq.content_type = "application/json";
     rq.auth_header = NULL;
     rq.timeout_ms = timeout_ms;
     return sf_http_request(&rq, resp);

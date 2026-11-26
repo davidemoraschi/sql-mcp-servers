@@ -1,0 +1,4 @@
+#define PRODUCT_DESCRIPTION "BigQuery MCP server"
+#define EXECUTABLE_NAME "bigquery-mcp-server.exe"
+#define INTERNAL_NAME "bigquery-mcp-server"
+#include "app.rc"

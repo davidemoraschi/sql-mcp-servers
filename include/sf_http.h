@@ -24,6 +24,7 @@ typedef struct {
     const char *host;
     const char *path_and_query;
     const char *json_body;    /* POST only, may be NULL                       */
+    const char *content_type; /* request body type; defaults to application/json */
     const char *auth_header;  /* full header line without CRLF, or NULL       */
     int timeout_ms;
 } SfHttpRequest;

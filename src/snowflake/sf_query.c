@@ -200,6 +200,7 @@ static bool sq_do_request(const char *method, const char *path, const char *body
     rq.host = g.host;
     rq.path_and_query = path;
     rq.json_body = body;
+    rq.content_type = "application/json";
     rq.auth_header = auth;
     rq.timeout_ms = SF_REQ_TIMEOUT_MS;
     ok = sf_http_request(&rq, http);
