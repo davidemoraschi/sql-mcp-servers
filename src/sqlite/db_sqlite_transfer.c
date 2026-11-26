@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include "db_sqlite.h"
 #include "db_sqlite_internal.h"
 
@@ -58,6 +59,62 @@ static size_t strip_newline(char *line) {
     size_t ll = strlen(line);
     while (ll > 0 && (line[ll - 1] == '\n' || line[ll - 1] == '\r')) line[--ll] = '\0';
     return ll;
+}
+
+/* Return an allocated JSON string value (without surrounding quotes). */
+static char *json_escape_value(const char *value) {
+    if (!value) value = "";
+    size_t len = strlen(value);
+    if (len > (SIZE_MAX - 1) / 6) return NULL;
+
+    char *escaped = (char *)malloc(len * 6 + 1);
+    if (!escaped) return NULL;
+
+    size_t pos = 0;
+    for (const unsigned char *p = (const unsigned char *)value; *p; p++) {
+        switch (*p) {
+            case '"': escaped[pos++] = '\\'; escaped[pos++] = '"'; break;
+            case '\\': escaped[pos++] = '\\'; escaped[pos++] = '\\'; break;
+            case '\b': escaped[pos++] = '\\'; escaped[pos++] = 'b'; break;
+            case '\f': escaped[pos++] = '\\'; escaped[pos++] = 'f'; break;
+            case '\n': escaped[pos++] = '\\'; escaped[pos++] = 'n'; break;
+            case '\r': escaped[pos++] = '\\'; escaped[pos++] = 'r'; break;
+            case '\t': escaped[pos++] = '\\'; escaped[pos++] = 't'; break;
+            default:
+                if (*p < 0x20) {
+                    snprintf(escaped + pos, 7, "\\u%04x", (unsigned int)*p);
+                    pos += 6;
+                } else {
+                    escaped[pos++] = (char)*p;
+                }
+                break;
+        }
+    }
+    escaped[pos] = '\0';
+    return escaped;
+}
+
+static char *build_import_json(const char *destination_table, long rows_processed,
+                               const char *source_path) {
+    char *escaped_path = json_escape_value(source_path);
+    if (!escaped_path) return NULL;
+
+    size_t table_len = strlen(destination_table);
+    size_t path_len = strlen(escaped_path);
+    if (path_len > SIZE_MAX - 256 || table_len > SIZE_MAX - path_len - 256) {
+        free(escaped_path);
+        return NULL;
+    }
+
+    size_t json_size = table_len + path_len + 256;
+    char *json = (char *)malloc(json_size);
+    if (json) {
+        snprintf(json, json_size,
+            "{\"status\":\"success\",\"engine\":\"sqlite\",\"operation\":\"import\",\"target\":\"%s\",\"rows_processed\":%ld,\"bytes_processed\":0,\"duration_seconds\":0,\"files_created_or_read\":[\"%s\"],\"warnings\":[]}",
+            destination_table, rows_processed, escaped_path);
+    }
+    free(escaped_path);
+    return json;
 }
 
 DbQueryResult db_export_data(const char *target, const char *destination_path, const char *format,
@@ -262,16 +319,25 @@ DbQueryResult db_import_data(const char *source_path, const char *destination_ta
 
     if (aborted) { res.error_message = safe_strdup("Import aborted due to row error (on_error=abort)"); return res; }
 
-    char bm[512], bj[512];
+    char bm[512];
     snprintf(bm, sizeof(bm), "| status | destination | rows_processed | errors |\n|---|---|---|---|\n| success | %s | %ld | %ld |", destination_table, rows_ok, rows_err);
-    snprintf(bj, sizeof(bj), "{\"status\":\"success\",\"engine\":\"sqlite\",\"operation\":\"import\",\"target\":\"%s\",\"rows_processed\":%ld,\"bytes_processed\":0,\"duration_seconds\":0,\"files_created_or_read\":[\"%s\"],\"warnings\":[]}", destination_table, rows_ok, source_path);
-    res.markdown_table = safe_strdup(bm); res.json_structured = safe_strdup(bj);
+    res.markdown_table = safe_strdup(bm);
+    res.json_structured = build_import_json(destination_table, rows_ok, source_path);
+    if (!res.json_structured) {
+        res.error_message = safe_strdup("Unable to allocate import response");
+        return res;
+    }
     res.success = true; res.rows_affected = (int)rows_ok; return res;
 #else
     (void)fmt; (void)dc; (void)header; (void)on_err; (void)auto_create_table; (void)optimize_speed;
-    char bm[256], bj[256];
+    char bm[256];
     snprintf(bm, sizeof(bm), "| status | destination | source |\n|---|---|---|\n| success | %s | %s |", destination_table, source_path);
-    snprintf(bj, sizeof(bj), "{\"status\":\"success\",\"engine\":\"sqlite\",\"operation\":\"import\",\"target\":\"%s\",\"rows_processed\":0,\"bytes_processed\":0,\"duration_seconds\":0,\"files_created_or_read\":[\"%s\"],\"warnings\":[]}", destination_table, source_path);
-    res.markdown_table = safe_strdup(bm); res.json_structured = safe_strdup(bj); res.success = true; return res;
+    res.markdown_table = safe_strdup(bm);
+    res.json_structured = build_import_json(destination_table, 0, source_path);
+    if (!res.json_structured) {
+        res.error_message = safe_strdup("Unable to allocate import response");
+        return res;
+    }
+    res.success = true; return res;
 #endif
 }
