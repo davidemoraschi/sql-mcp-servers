@@ -78,6 +78,41 @@ if(BUILD_SNOWFLAKE)
 endif()
 
 # ---------------------------------------------------------------------------
+# BigQuery MCP Server (OAuth 2.0 + BigQuery REST API)
+# ---------------------------------------------------------------------------
+set(BUILD_BIGQUERY ON)
+if(NOT WIN32)
+    find_package(CURL)
+    if(NOT CURL_FOUND)
+        message(WARNING "libcurl not found: skipping bigquery-mcp-server (install libcurl4-openssl-dev)")
+        set(BUILD_BIGQUERY OFF)
+    endif()
+endif()
+
+if(BUILD_BIGQUERY)
+    add_executable(bigquery-mcp-server
+        src/bigquery/main_bigquery.c
+        src/bigquery/bq_oauth.c
+        src/bigquery/db_bigquery.c
+        src/bigquery/db_bigquery_schema.c
+        src/bigquery/db_bigquery_transfer.c
+        src/shared/mcp_loop.c
+        src/shared/json_rpc.c
+        src/shared/rdbms_tools.c
+        src/snowflake/sf_buf.c
+        src/snowflake/sf_http.c
+    )
+    if(WIN32)
+        target_link_libraries(bigquery-mcp-server PRIVATE winhttp ws2_32 shell32 bcrypt)
+        target_sources(bigquery-mcp-server PRIVATE res/bigquery.rc)
+        target_include_directories(bigquery-mcp-server PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/res")
+    else()
+        target_link_libraries(bigquery-mcp-server PRIVATE CURL::libcurl)
+    endif()
+    list(APPEND MCP_TARGETS bigquery-mcp-server)
+endif()
+
+# ---------------------------------------------------------------------------
 # PostgreSQL MCP Server (no external dependencies - pure wire protocol)
 # ---------------------------------------------------------------------------
 add_executable(postgres-mcp-server

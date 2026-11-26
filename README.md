@@ -1,4 +1,4 @@
-# Standalone Native ANSI C SQLite MCP Server
+# Native ANSI C MCP Servers for SQLite, PostgreSQL, Snowflake, and BigQuery
 
 A high-performance, zero-dependency Model Context Protocol (MCP) server written in C11. Operating over Standard I/O (`stdio`), it provides local AI desktop hosts (such as Studio, Claude Desktop, and Claude Code) with secure, high-speed access to SQLite databases.
 
@@ -12,7 +12,7 @@ Built strictly in accordance with the **MCP 2026-07-28 Specification** and **JSO
 - **Strict Line Budget**: Every source file (`.c` / `.h`) is strictly under 500 lines of code.
 - **Environment Credentials**: DB path, access mode, busy timeout, and encryption key are loaded strictly from environment variables.
 - **SQL Injection Defense**: Strict parameter binding and table/column name whitelisting.
-- **Portable RDBMS Tools**: Includes tools for `read_query`, `write_query`, `backup_database`, `explain_query`, `describe_table`, `infer_relationships`, `generate_erd`, `list_tables`, `export_data`, and `check_database_health`.
+- **Shared Database Tools**: Servers expose the common query, schema, relationship, ERD, import/export, and health tools. Database-specific unsupported tools are omitted.
 
 ---
 
@@ -148,6 +148,47 @@ Differences from the SQLite tools: `backup_database` is not offered; `check_data
         "SNOWFLAKE_USER": "me@example.com",
         "SNOWFLAKE_WAREHOUSE": "COMPUTE_WH",
         "SNOWFLAKE_ACCESS_MODE": "READONLY"
+      }
+    }
+  }
+}
+```
+
+---
+
+## BigQuery MCP Server (`bigquery-mcp-server`)
+
+Uses the BigQuery REST API with Google **end-user OAuth**. On first use, the server opens the system browser for the user to sign in and grant BigQuery access. It receives the authorization callback over a temporary loopback listener and stores the user's refresh token in that operating-system user's config directory. Later launches reuse the cached user grant. Create an OAuth client with application type **Desktop app**. See Google's [installed-app user authorization guide](https://developers.google.com/identity/protocols/oauth2/native-app) and [BigQuery user authentication guide](https://cloud.google.com/bigquery/docs/authentication/end-user-installed).
+
+| Variable | Default | Description |
+|---|---|---|
+| `BIGQUERY_PROJECT_ID` | required | Google Cloud project that owns query jobs. |
+| `BIGQUERY_OAUTH_CLIENT_ID` | required | Desktop OAuth client ID used for the user's sign-in and consent. |
+| `BIGQUERY_OAUTH_CLIENT_SECRET` | none | Optional desktop client secret, if provided by the OAuth client configuration. |
+| `BIGQUERY_OAUTH_REFRESH_TOKEN` | none | Optional pre-authorized user refresh token; when omitted, the server starts browser sign-in and saves the returned token locally. Treat it as a password. |
+| `BIGQUERY_OAUTH_TOKEN_CACHE` | OS user config path | Optional path to the cached user refresh token. By default it is stored under the current user's local application/config directory. |
+| `BIGQUERY_HOST` | `bigquery.googleapis.com` | BigQuery API hostname; provide a hostname only, without `https://` or a path. |
+| `BIGQUERY_DATASET` | none | Default dataset for unqualified SQL names and one-part table names. |
+| `BIGQUERY_LOCATION` | `US` | Query and metadata region, such as `US`, `EU`, or `us-central1`. |
+| `BIGQUERY_ACCESS_MODE` | `READWRITE` | `READONLY` disables `write_query` and `import_data`; use IAM roles for server-side enforcement too. |
+| `BIGQUERY_TIMEOUT_SECONDS` | `60` | HTTP and query-job completion timeout. |
+
+The server exposes the shared `read_query`, `write_query`, `explain_query`, `describe_table`, `infer_relationships`, `generate_erd`, `list_tables`, `export_data`, `import_data`, and `check_database_health` tools. BigQuery does not provide the local-file `backup_database` operation, so that tool is not advertised. `read_query` accepts SELECT/WITH/EXPLAIN/SHOW/DESCRIBE statements. Query results and local exports are capped at 1,000 rows. Import accepts CSV/TSV and uses BigQuery `tabledata.insertAll`; inserts are not a single atomic transaction, so a failed import can leave earlier rows written. `auto_create_table` creates STRING columns from a CSV header.
+
+Linux builds require libcurl, like the Snowflake server. Windows uses WinHTTP from the Windows SDK.
+
+```json
+{
+  "mcpServers": {
+    "bigquery": {
+      "command": "/path/to/bigquery-mcp-server",
+      "env": {
+        "BIGQUERY_PROJECT_ID": "my-gcp-project",
+        "BIGQUERY_DATASET": "analytics",
+        "BIGQUERY_LOCATION": "US",
+        "BIGQUERY_OAUTH_CLIENT_ID": "your-desktop-client-id.apps.googleusercontent.com",
+        "BIGQUERY_OAUTH_CLIENT_SECRET": "optional-desktop-client-secret",
+        "BIGQUERY_ACCESS_MODE": "READONLY"
       }
     }
   }
