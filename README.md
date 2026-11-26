@@ -217,7 +217,59 @@ Uses the Athena HTTPS JSON API directly with ANSI C implementations of AWS Signa
 | `AWS_SHARED_CREDENTIALS_FILE` | standard AWS path | Optional credentials-file override. |
 | `AWS_CONFIG_FILE` | standard AWS path | Optional AWS config-file override; static credentials in profile sections are supported. |
 
-The IAM identity needs Athena query permissions, Glue catalog read permissions, and access to the configured S3 query-results location. The common query, explain, schema, relationship, ERD, list, export, import, and health tools are exposed. Athena does not expose relational key constraints, cannot back up a database, and cannot directly import a local file; those operations return explicit guidance. Export supports JSON, CSV, and TSV without compression.
+### Authentication
+
+Credential resolution uses this order:
+
+1. `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY`, plus `AWS_SESSION_TOKEN` for temporary credentials.
+2. Static credentials in the `AWS_PROFILE` section of the shared credentials or config file.
+3. An IAM Identity Center profile linked to an `[sso-session ...]` section.
+
+For IAM Identity Center, the profile supplies the account and role while the referenced SSO session supplies the start URL and SSO region:
+
+```ini
+[profile analytics]
+sso_session = company
+sso_account_id = 111122223333
+sso_role_name = DataAnalyst
+region = eu-west-1
+
+[sso-session company]
+sso_start_url = https://company.awsapps.com/start
+sso_region = eu-west-1
+sso_registration_scopes = sso:account:access
+```
+
+Set `AWS_PROFILE=analytics`. The server reuses a matching token from the standard `~/.aws/sso/cache` directory. If the token is absent, expired, or rejected, it starts the IAM Identity Center device-authorization flow, prints the verification URL to stderr, and opens the default browser. It then exchanges the bearer token for temporary credentials for `sso_account_id` and `sso_role_name`. The AWS SDK and AWS CLI are not required.
+
+Do not place long-lived access keys directly in the MCP configuration when a shared profile or IAM Identity Center is available.
+
+### IAM and S3 requirements
+
+The resolved identity normally needs:
+
+- `athena:StartQueryExecution`, `athena:GetQueryExecution`, and `athena:GetQueryResults` on the selected workgroup.
+- Glue catalog read permissions such as `glue:GetDatabase`, `glue:GetDatabases`, `glue:GetTable`, `glue:GetTables`, and `glue:GetPartitions` for the queried catalog objects.
+- Read access to source data in S3.
+- `s3:GetBucketLocation`, `s3:PutObject`, and `s3:GetObject` for the Athena query-results location.
+- Relevant KMS permissions when source data or query results use customer-managed KMS keys.
+
+`ATHENA_OUTPUT_LOCATION` may be omitted when the workgroup enforces its own result configuration. Otherwise, set it to a writable `s3://.../` location.
+
+### Tools and behavior
+
+The server exposes `read_query`, `write_query`, `explain_query`, `describe_table`, `infer_relationships`, `generate_erd`, `list_tables`, `export_data`, `import_data`, and `check_database_health`. `backup_database` is not advertised.
+
+- Queries use `StartQueryExecution`, poll `GetQueryExecution`, and retrieve paginated results with `GetQueryResults`.
+- A unique Athena `ClientRequestToken` is generated automatically for every query.
+- Returned and locally exported results are capped at 1,000 rows.
+- `read_query` accepts `SELECT`, `WITH`, `SHOW`, `DESCRIBE`, and `EXPLAIN` statements.
+- `ATHENA_ACCESS_MODE=READONLY` rejects `write_query`; IAM policies remain the authoritative protection.
+- Local export supports JSON, CSV, and TSV without compression.
+- Athena cannot directly upload a local file as table rows. `import_data` returns guidance to upload the data to S3 and create or update a Glue/Athena table.
+- Athena/Glue does not expose relational primary-key and foreign-key constraints. Relationship and ERD output therefore cannot infer database-enforced relationships.
+
+### MCP configuration
 
 ```json
 {
@@ -236,3 +288,5 @@ The IAM identity needs Athena query permissions, Glue catalog read permissions, 
   }
 }
 ```
+
+If startup reports that no static credentials were found for an SSO profile, verify that the profile contains `sso_session`, `sso_account_id`, and `sso_role_name`, and that the referenced `[sso-session ...]` section contains `sso_start_url` and `sso_region`. Restart the MCP host after changing either AWS configuration files or MCP environment variables.
