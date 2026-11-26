@@ -1,1 +1,2 @@
+#include "versioninfo.rc"
 IDI_APP ICON "app.ico"

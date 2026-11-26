@@ -32,12 +32,11 @@ add_executable(mcp_test_runner_postgres src/postgres/test_runner_postgres.c)
 
 set(MCP_TARGETS sqlite-mcp-server mcp_test_runner_sqlite mcp_test_runner_postgres)
 
-# Embed the application icon in every Windows executable.
+# Embed the application icon and version information in every Windows executable.
 if(WIN32)
-    set(MCP_WINDOWS_ICON res/app.rc)
-    target_sources(sqlite-mcp-server PRIVATE ${MCP_WINDOWS_ICON})
-    target_sources(mcp_test_runner_sqlite PRIVATE ${MCP_WINDOWS_ICON})
-    target_sources(mcp_test_runner_postgres PRIVATE ${MCP_WINDOWS_ICON})
+    target_sources(sqlite-mcp-server PRIVATE res/sqlite.rc)
+    target_sources(mcp_test_runner_sqlite PRIVATE res/test_runner_sqlite.rc)
+    target_sources(mcp_test_runner_postgres PRIVATE res/test_runner_postgres.rc)
 endif()
 
 # ---------------------------------------------------------------------------
@@ -74,7 +73,7 @@ if(BUILD_SNOWFLAKE)
     endif()
     list(APPEND MCP_TARGETS snowflake-mcp-server)
     if(WIN32)
-        target_sources(snowflake-mcp-server PRIVATE ${MCP_WINDOWS_ICON})
+        target_sources(snowflake-mcp-server PRIVATE res/snowflake.rc)
     endif()
 endif()
 
@@ -97,7 +96,7 @@ if(WIN32)
 endif()
 list(APPEND MCP_TARGETS postgres-mcp-server)
 if(WIN32)
-    target_sources(postgres-mcp-server PRIVATE ${MCP_WINDOWS_ICON})
+    target_sources(postgres-mcp-server PRIVATE res/postgres.rc)
 endif()
 
 # ---------------------------------------------------------------------------

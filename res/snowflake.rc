@@ -1,0 +1,4 @@
+#define PRODUCT_DESCRIPTION "Snowflake MCP server"
+#define EXECUTABLE_NAME "snowflake-mcp-server.exe"
+#define INTERNAL_NAME "snowflake-mcp-server"
+#include "app.rc"

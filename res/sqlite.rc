@@ -1,0 +1,4 @@
+#define PRODUCT_DESCRIPTION "SQLite MCP server"
+#define EXECUTABLE_NAME "sqlite-mcp-server.exe"
+#define INTERNAL_NAME "sqlite-mcp-server"
+#include "app.rc"

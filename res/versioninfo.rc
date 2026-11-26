@@ -1,0 +1,28 @@
+1 VERSIONINFO
+ FILEVERSION 1,0,0,0
+ PRODUCTVERSION 0,9,0,0
+ FILEFLAGSMASK 0x3fL
+ FILEFLAGS 0
+ FILEOS 0x00040004L
+ FILETYPE 0x00000001L
+ FILESUBTYPE 0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "Acme"
+            VALUE "FileDescription", PRODUCT_DESCRIPTION
+            VALUE "FileVersion", "1.0.0.0"
+            VALUE "InternalName", INTERNAL_NAME
+            VALUE "ProductName", "Acme MCP tools"
+            VALUE "ProductVersion", "0.9"
+            VALUE "LegalCopyright", "Actually Works, Surprisingly"
+            VALUE "OriginalFilename", EXECUTABLE_NAME
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END
