@@ -26,7 +26,7 @@ BQ_SRCS = src/bigquery/main_bigquery.c src/bigquery/bq_oauth.c src/bigquery/db_b
           src/shared/mcp_loop.c src/shared/json_rpc.c src/shared/rdbms_tools.c src/snowflake/sf_buf.c src/snowflake/sf_http.c
 BQ_OBJS = $(BQ_SRCS:.c=.o)
 
-ATHENA_SRCS = src/athena/main_athena.c src/athena/aws_sha256.c src/athena/aws_credentials.c src/athena/aws_sigv4.c \
+ATHENA_SRCS = src/athena/main_athena.c src/athena/aws_sha256.c src/athena/aws_credentials.c src/athena/aws_sso.c src/athena/aws_sigv4.c \
               src/athena/db_athena.c src/athena/db_athena_schema.c src/athena/db_athena_transfer.c \
               src/shared/mcp_loop.c src/shared/json_rpc.c src/shared/rdbms_tools.c src/snowflake/sf_buf.c src/snowflake/sf_http.c
 ATHENA_OBJS = $(ATHENA_SRCS:.c=.o)
@@ -37,7 +37,7 @@ TEST_PG_OBJS = $(TEST_PG_SRCS:.c=.o)
 ifeq ($(OS),Windows_NT)
 SF_LIBS    = -lwinhttp -lws2_32 -lshell32
     BQ_LIBS    = -lwinhttp -lws2_32 -lshell32 -lbcrypt
-ATHENA_LIBS = -lwinhttp
+ATHENA_LIBS = -lwinhttp -lshell32
 PG_LIBS    = -lws2_32
 SF_CFLAGS  =
 SF_ENABLED = yes

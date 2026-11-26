@@ -67,10 +67,10 @@ if %ERRORLEVEL% NEQ 0 (
 
 echo [INFO] Compiling AWS Athena MCP Server...
 cl.exe /nologo /std:c11 /O2 /GL /Gy /Gw /MD /DNDEBUG /D_CRT_SECURE_NO_WARNINGS /D_CRT_NONSTDC_NO_DEPRECATE /Iinclude ^
-    src\athena\main_athena.c src\athena\aws_sha256.c src\athena\aws_credentials.c src\athena\aws_sigv4.c ^
+    src\athena\main_athena.c src\athena\aws_sha256.c src\athena\aws_credentials.c src\athena\aws_sso.c src\athena\aws_sigv4.c ^
     src\athena\db_athena.c src\athena\db_athena_schema.c src\athena\db_athena_transfer.c ^
     src\shared\mcp_loop.c src\shared\json_rpc.c src\shared\rdbms_tools.c src\snowflake\sf_buf.c src\snowflake\sf_http.c ^
-    /link /LTCG /OPT:REF /OPT:ICF bin\athena.res winhttp.lib /OUT:bin\athena-mcp-server.exe
+    /link /LTCG /OPT:REF /OPT:ICF bin\athena.res winhttp.lib shell32.lib /OUT:bin\athena-mcp-server.exe
 if %ERRORLEVEL% NEQ 0 (
     echo [ERROR] AWS Athena server compilation failed.
     exit /b 1

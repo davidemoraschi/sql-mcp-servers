@@ -6,6 +6,7 @@
 #include <string.h>
 #include <ctype.h>
 #include "aws_credentials.h"
+#include "aws_sso.h"
 
 static char *dupstr(const char*s){if(!s||!*s)return NULL;size_t n=strlen(s)+1;char*p=(char*)malloc(n);if(p)memcpy(p,s,n);return p;}
 static void wipe(char **p){if(*p){volatile char*q=*p;size_t n=strlen(*p);while(n--)*q++=0;free(*p);*p=NULL;}}
@@ -50,5 +51,6 @@ bool aws_credentials_load(const char *profile,AwsCredentials*out,char*err,size_t
  }
  snprintf(section,sizeof(section),"%s",!strcmp(p,"default")?"default":"");if(strcmp(p,"default"))snprintf(section,sizeof(section),"profile %s",p);
  if(load_file(config_path,section,out))return true;aws_credentials_free(out);
+ err[0]=0;if(aws_sso_credentials_load(p,out,err,cap))return true;if(*err)return false;
  snprintf(err,cap,"No static AWS credentials found; set AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY or configure profile '%s' in %s",p,path);return false;
 }

@@ -199,7 +199,7 @@ Linux builds require libcurl, like the Snowflake server. Windows uses WinHTTP fr
 
 ## AWS Athena MCP Server (`athena-mcp-server`)
 
-Uses the Athena HTTPS JSON API directly with an ANSI C implementation of AWS Signature Version 4. It does not use the AWS SDK or the AWS CLI. Credentials are resolved from `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / optional `AWS_SESSION_TOKEN`, then from the selected profile in the shared AWS credentials file (`~/.aws/credentials` or `%USERPROFILE%\.aws\credentials`). Static and temporary credentials are supported; IAM Identity Center profiles that require an SSO token exchange are not yet supported.
+Uses the Athena HTTPS JSON API directly with ANSI C implementations of AWS Signature Version 4 and IAM Identity Center device authorization. It does not use the AWS SDK or the AWS CLI. Credentials are resolved from `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` / optional `AWS_SESSION_TOKEN`, then from the selected shared AWS profile. Static, temporary, and `sso-session` profiles are supported. A valid token in the standard AWS SSO cache is reused; otherwise the server opens the browser to authorize the configured account and role.
 
 | Variable | Default | Description |
 |---|---|---|

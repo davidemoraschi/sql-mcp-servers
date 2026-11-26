@@ -129,6 +129,7 @@ if(BUILD_ATHENA)
         src/athena/main_athena.c
         src/athena/aws_sha256.c
         src/athena/aws_credentials.c
+        src/athena/aws_sso.c
         src/athena/aws_sigv4.c
         src/athena/db_athena.c
         src/athena/db_athena_schema.c
@@ -140,7 +141,7 @@ if(BUILD_ATHENA)
         src/snowflake/sf_http.c
     )
     if(WIN32)
-        target_link_libraries(athena-mcp-server PRIVATE winhttp)
+        target_link_libraries(athena-mcp-server PRIVATE winhttp shell32)
         target_sources(athena-mcp-server PRIVATE res/athena.rc)
     else()
         target_link_libraries(athena-mcp-server PRIVATE CURL::libcurl)

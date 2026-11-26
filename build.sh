@@ -55,7 +55,7 @@ if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists libcurl; then
     $CC -std=c11 -O2 -fomit-frame-pointer -ffunction-sections -fdata-sections \
         -D_CRT_SECURE_NO_WARNINGS -D_CRT_NONSTDC_NO_DEPRECATE \
         -Iinclude $(pkg-config --cflags libcurl) \
-        src/athena/main_athena.c src/athena/aws_sha256.c src/athena/aws_credentials.c src/athena/aws_sigv4.c \
+        src/athena/main_athena.c src/athena/aws_sha256.c src/athena/aws_credentials.c src/athena/aws_sso.c src/athena/aws_sigv4.c \
         src/athena/db_athena.c src/athena/db_athena_schema.c src/athena/db_athena_transfer.c \
         src/shared/mcp_loop.c src/shared/json_rpc.c src/shared/rdbms_tools.c src/snowflake/sf_buf.c src/snowflake/sf_http.c \
         -Wl,--gc-sections -Wl,-s -o bin/athena-mcp-server $(pkg-config --libs libcurl) -lm
