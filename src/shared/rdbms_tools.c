@@ -111,9 +111,16 @@ static char *json_escape_string(const char *input) {
 
 static void send_tool_response(const char *id, DbQueryResult *res) {
     if (!res->success) {
-        char err_json[512];
-        snprintf(err_json, sizeof(err_json), "{\"error\":\"%s\"}", res->error_message ? res->error_message : "Execution failed");
+        const char *message = res->error_message ? res->error_message : "Execution failed";
+        char *escaped = json_escape_string(message);
+        char *err_json = NULL;
+        if (escaped) {
+            size_t len = strlen(escaped) + 16;
+            err_json = (char *)malloc(len);
+            if (err_json) snprintf(err_json, len, "{\"error\":\"%s\"}", escaped);
+        }
         json_rpc_send_error(id, JSONRPC_ERR_INTERNAL, "Tool execution failed", err_json);
+        free(err_json); free(escaped);
         db_free_result(res);
         return;
     }

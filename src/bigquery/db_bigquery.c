@@ -278,6 +278,28 @@ static char *bq_url_encode(const char *s) {
     out[j] = '\0'; return out;
 }
 
+static bool bq_query_error(const JsonValue *root, char *err, size_t err_size) {
+    const JsonValue *problem = NULL;
+    const JsonValue *errors = json_object_get(root, "errors");
+    if (errors && errors->type == JSON_ARRAY && errors->u.array.count)
+        problem = errors->u.array.items[0];
+    if (!problem) {
+        const JsonValue *status = json_object_get(root, "status");
+        problem = json_object_get(status, "errorResult");
+    }
+    if (!problem || problem->type != JSON_OBJECT) return false;
+    const char *message = json_string_value(json_object_get(problem, "message"));
+    const char *reason = json_string_value(json_object_get(problem, "reason"));
+    const char *location = json_string_value(json_object_get(problem, "location"));
+    if (reason && location)
+        snprintf(err, err_size, "BigQuery query failed (%s at %s): %s", reason, location, message ? message : "unknown error");
+    else if (reason)
+        snprintf(err, err_size, "BigQuery query failed (%s): %s", reason, message ? message : "unknown error");
+    else
+        snprintf(err, err_size, "BigQuery query failed: %s", message ? message : "unknown error");
+    return true;
+}
+
 static JsonValue *bq_query_start(const char *sql, char *err, size_t err_size) {
     SfBuf body = {NULL,0,0,false}; char path[512]; char *project = bq_url_encode(g_bq.project);
     if (!project) { snprintf(err, err_size, "Out of memory"); return NULL; }
@@ -293,6 +315,7 @@ static JsonValue *bq_query_start(const char *sql, char *err, size_t err_size) {
     char *json = sf_buf_take(&body); if (!json) { snprintf(err, err_size, "Out of memory"); return NULL; }
     JsonValue *root = bq_api_json("POST", path, json, err, err_size); free(json);
     if (!root) return NULL;
+    if (bq_query_error(root, err, err_size)) { json_free(root); return NULL; }
     const JsonValue *done = json_object_get(root, "jobComplete");
     if (done && done->type == JSON_BOOL && done->u.boolean) return root;
 
@@ -307,6 +330,7 @@ static JsonValue *bq_query_start(const char *sql, char *err, size_t err_size) {
     for (int i = 0; i < g_bq.timeout_seconds * 2; i++) {
         bq_sleep(); root = bq_api_json("GET", poll, NULL, err, err_size);
         if (!root) return NULL;
+        if (bq_query_error(root, err, err_size)) { json_free(root); return NULL; }
         done = json_object_get(root, "jobComplete");
         if (done && done->type == JSON_BOOL && done->u.boolean) return root;
         json_free(root); root = NULL;
