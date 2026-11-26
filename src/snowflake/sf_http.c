@@ -276,7 +276,16 @@ bool sf_http_request(const SfHttpRequest *rq, SfHttpResponse *resp) {
         hdrs = curl_slist_append(hdrs, content_type);
     }
     hdrs = curl_slist_append(hdrs, "Accept: application/json");
-    if (rq->auth_header) hdrs = curl_slist_append(hdrs, rq->auth_header);
+    if (rq->auth_header) {
+        const char *p = rq->auth_header;
+        while (*p) {
+            const char *e = strstr(p, "\r\n"); size_t n = e ? (size_t)(e - p) : strlen(p);
+            char *line = (char *)malloc(n + 1);
+            if (!line) break;
+            memcpy(line, p, n); line[n] = '\0'; if (n) hdrs = curl_slist_append(hdrs, line); free(line);
+            p = e ? e + 2 : p + n;
+        }
+    }
     curl_easy_setopt(curl, CURLOPT_URL, url);
     if (is_get) {
         curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);

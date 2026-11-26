@@ -1,0 +1,13 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "athena_internal.h"
+#include "sf_buf.h"
+static void sqlstr(SfBuf*b,const char*s){sf_buf_str(b,"'");for(;s&&*s;s++){if(*s=='\'')sf_buf_str(b,"''");else sf_buf_add(b,s,1);}sf_buf_str(b,"'");}
+static bool parts(const char*n,char*schema,size_t sc,char*table,size_t tc){if(!db_validate_identifier(n))return false;const char*p=strrchr(n,'.');if(p){size_t k=(size_t)(p-n);const char*q=NULL;for(const char*x=n;x<p;x++)if(*x=='.')q=x;if(q){n=q+1;k=(size_t)(p-n);}if(k>=sc)return false;memcpy(schema,n,k);schema[k]=0;snprintf(table,tc,"%s",p+1);}else{snprintf(schema,sc,"%s",athena_database());snprintf(table,tc,"%s",n);}return *schema&&*table;}
+DbQueryResult db_describe_table(const char*n){char schema[256],table[256];if(!parts(n,schema,sizeof(schema),table,sizeof(table)))return athena_fail("Invalid Athena table name; use table, database.table, or catalog.database.table");SfBuf q={0};sf_buf_str(&q,"SELECT column_name, data_type, is_nullable, ordinal_position FROM information_schema.columns WHERE table_schema = ");sqlstr(&q,schema);sf_buf_str(&q," AND table_name = ");sqlstr(&q,table);sf_buf_str(&q," ORDER BY ordinal_position");char*s=sf_buf_take(&q);DbQueryResult r=s?athena_run(s):athena_fail("Out of memory");free(s);return r;}
+DbQueryResult db_list_tables(void){SfBuf q={0};sf_buf_str(&q,"SELECT table_catalog, table_schema, table_name, table_type FROM information_schema.tables WHERE table_schema = ");sqlstr(&q,athena_database());sf_buf_str(&q," ORDER BY table_name");char*s=sf_buf_take(&q);DbQueryResult r=s?athena_run(s):athena_fail("Out of memory");free(s);return r;}
+static DbQueryResult text_result(const char*md,const char*json){DbQueryResult r;memset(&r,0,sizeof(r));r.markdown_table=(char*)malloc(strlen(md)+1);r.json_structured=(char*)malloc(strlen(json)+1);if(r.markdown_table)strcpy(r.markdown_table,md);if(r.json_structured)strcpy(r.json_structured,json);r.success=r.markdown_table&&r.json_structured;if(!r.success){db_free_result(&r);return athena_fail("Out of memory");}return r;}
+DbQueryResult db_infer_relationships(void){return text_result("Athena/Glue catalogs do not expose primary-key or foreign-key constraints.","{\"relationships\":[],\"engine\":\"athena\"}");}
+DbQueryResult db_generate_erd_plantuml(void){return text_result("@startuml\ntitle AWS Athena schema\nnote \"Athena/Glue does not expose relational key constraints; use describe_table and list_tables for schema metadata.\" as N1\n@enduml","{\"format\":\"plantuml\",\"relationships\":[]}");}
+DbQueryResult db_check_health(void){return athena_run("SELECT current_catalog AS catalog, current_schema AS database, current_user AS user");}
